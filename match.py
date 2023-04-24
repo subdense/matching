@@ -4,7 +4,7 @@ import jpype.imports
 from jpype.types import *
 
 # Launch the JVM
-jpype.startJVM(classpath=['jars/geoxygene-matching-1.10-SNAPSHOT-jar-with-dependencies.jar'])
+jpype.startJVM(classpath=['jars/geoxygene-matching-1.10-SNAPSHOT.jar'])
 
 # import the Java modules
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import ParametresAppSurfaces, AppariementSurfaces
