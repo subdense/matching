@@ -10,7 +10,13 @@ jpype.startJVM(classpath=['jars/geoxygene-matching-1.10-SNAPSHOT.jar'])
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import ParametresAppSurfaces, AppariementSurfaces
 from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader, ShapefileWriter
 
-# Copy in the patterns from the guide to replace the example code
+import sys
+
+import shapely
+from shapely import LineString
+import geopandas
+
+# Parameters of the matching algorithm
 param = ParametresAppSurfaces()
 param.surface_min_intersection = 1
 param.pourcentage_min_intersection = 0.2
@@ -26,20 +32,62 @@ param.persistant = False
 param.resolutionMin = 1
 param.resolutionMax = 11
 
-db1 = ShapefileReader.read("./data/bati/bati_95430.shp", True)
-db2 = ShapefileReader.read("./data/bati/cadastre_bati_95430.shp", True)
-#print("db1 = ",db1.size())
-for f in db1:
-    f.setGeom(f.getGeom().get(0))
-#print("db2 = ",db2.size())
-for f in db2:
-    f.setGeom(f.getGeom().get(0))
+if len(sys.argv)!=3:
+    layer1 = "./data/bati/bati_95430.shp"
+    layer2 = "./data/bati/cadastre_bati_95430.shp"
+else:
+    layer1 = sys.argv[1]
+    layer2 = sys.argv[2]
+
+db1 = ShapefileReader.read(layer1, True)
+db2 = ShapefileReader.read(layer2, True)
+reader = ShapefileReader("./data/bati/bati_95430.shp", "bati_95430", None, False)
+print(reader)
+crs = reader.getCRS()
+print(crs)
+
+# reduce multipolygons into single polygons
+l1 = list()
+for feat1 in db1:
+    for i in range(0,feat1.getGeom().size()):
+        single_feat = feat1.cloneGeom()
+        single_feat.setGeom(feat1.getGeom().get(i))
+        l1.append(single_feat)
+db1.clear()
+for f1 in l1:
+    db1.add(f1)
+
+l2 = list()
+for feat2 in db2:
+    for i in range(0,feat2.getGeom().size()):
+        single_feat = feat2.cloneGeom()
+        single_feat.setGeom(feat2.getGeom().get(i))
+        l2.append(single_feat)
+db2.clear()
+for f2 in l2:
+    db2.add(f2)
+
 liensPoly = AppariementSurfaces.appariementSurfaces(db1, db2, param)
+
+attrs = list()
+geoms = list()
 for f in liensPoly:
-    if f.getGeom().size()>1:
-        for i in range(0,f.getGeom().size()):
-            print(f.getGeom().get(i))
-    else:
-        print(f.getGeom().get(0))
-# AppariementSurfaces.writeShapefile(liensPoly, "./data/bati/appariement.shp")
+    for i in range(0,f.getGeom().size()):
+        link = "LINESTRING ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),f.getGeom().get(i).coord().getList())))+")"
+        geoms.append(shapely.from_wkt(link))
+        attrs.append(list(f.getSchema().getColonnes())) # no attributes?
+
+#print(attrs)
+links = geopandas.GeoDataFrame({'geometry':geoms}, crs = "EPSG:2154")
+#print(links)
+#links.crs = crs
+#links.set_geometry()
+links.to_file('./data/bati/links.shp')
+
+# geoxygen export fails
+#AppariementSurfaces.writeShapefile(liensPoly, "./data/bati/appariement.shp")
 #ShapefileWriter.write(liensPoly, "./data/bati/appariement.shp")
+
+jpype.shutdownJVM()
+
+
