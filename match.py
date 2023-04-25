@@ -45,6 +45,8 @@ reader = ShapefileReader("./data/bati/bati_95430.shp", "bati_95430", None, False
 print(reader)
 crs = reader.getCRS()
 print(crs)
+#print(reader.crs)
+#print(reader.reader.getCRS())
 
 # reduce multipolygons into single polygons
 l1 = list()
@@ -82,7 +84,7 @@ links = geopandas.GeoDataFrame({'geometry':geoms}, crs = "EPSG:2154")
 #print(links)
 #links.crs = crs
 #links.set_geometry()
-links.to_file('./data/bati/links.shp')
+#links.to_file('./data/bati/links.shp')
 
 # geoxygen export fails
 #AppariementSurfaces.writeShapefile(liensPoly, "./data/bati/appariement.shp")
