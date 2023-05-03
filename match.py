@@ -10,7 +10,7 @@ jpype.startJVM(classpath=['jars/geoxygene-matching-1.10-SNAPSHOT.jar'])
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import ParametresAppSurfaces, AppariementSurfaces
 from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader, ShapefileWriter
 
-import sys
+import sys,os
 
 import shapely
 from shapely import LineString
@@ -33,12 +33,25 @@ param.persistant = False
 param.resolutionMin = 1
 param.resolutionMax = 11
 
+# param: index of IDs (same for both layers)
+id_index = 1
+
 if len(sys.argv)!=3:
-    layer1 = "./data/bati/bati_95430.shp"
-    layer2 = "./data/bati/cadastre_bati_95430.shp"
+    #layer1 = "./data/bati/bati_95430.shp"
+    #layer2 = "./data/bati/cadastre_bati_95430.shp"
+    #layer1 = "../../../Data/Test/Neudorf/valid_bati12.shp"
+    #layer2 = "../../../Data/Test/Neudorf/valid_bati22.shp"
+    layer1 = "./data/bati/neudorf_2012.shp"
+    layer2 = "./data/bati/neudorf_2022.shp"
 else:
     layer1 = sys.argv[1]
     layer2 = sys.argv[2]
+
+path = layer1.split("/")
+layer1name = os.path.splitext(path[len(path)-1])[0]
+path.pop(len(path)-1)
+path2 = layer2.split("/")
+layer2name = os.path.splitext(path2[len(path2)-1])[0]
 
 db1 = ShapefileReader.read(layer1, True)
 db2 = ShapefileReader.read(layer2, True)
@@ -55,13 +68,19 @@ db2 = ShapefileReader.read(layer2, True)
 #print(ogr.Open(layer1).GetLayer(0).GetSpatialRef().ExportToWkt()) # libgdal fails: ?
 crs = geopandas.read_file(layer1).crs
 
+# hashmap of all features
+allfeatures = dict()
+
 # reduce multipolygons into single polygons
 l1 = list()
 for feat1 in db1:
     for i in range(0,feat1.getGeom().size()):
         single_feat = feat1.cloneGeom()
+        currentid = layer1name+"-"+str(single_feat.getAttributes()[id_index].toString())+"-"+str(i)
         single_feat.setGeom(feat1.getGeom().get(i))
+        single_feat.setAttribute(0, currentid) # overwrite unused attr fid
         l1.append(single_feat)
+        allfeatures[currentid] = single_feat
 db1.clear()
 for f1 in l1:
     db1.add(f1)
@@ -70,8 +89,11 @@ l2 = list()
 for feat2 in db2:
     for i in range(0,feat2.getGeom().size()):
         single_feat = feat2.cloneGeom()
+        currentid = layer2name+"-"+str(single_feat.getAttributes()[id_index].toString())+"-"+str(i)
         single_feat.setGeom(feat2.getGeom().get(i))
+        single_feat.setAttribute(0, currentid)
         l2.append(single_feat)
+        allfeatures[currentid] = single_feat
 db2.clear()
 for f2 in l2:
     db2.add(f2)
@@ -79,9 +101,30 @@ for f2 in l2:
 # call to geoxygene matching algorithm
 liensPoly = AppariementSurfaces.appariementSurfaces(db1, db2, param)
 
+# construct geopandas data frame
 attrs = list()
 geoms = list()
+
+# to sort links by type
+features_stable = list()
+features_split = list()
+features_merged = list()
+features_modified = list()
+all_link_targets = set()
+all_link_sources = set()
+
 for f in liensPoly:
+    #print(f.getSchema().getColonnes()) # why do the matching links have no attributes - at least IDs should be kept
+    #print(f.getNom()) # empty
+    # FIXME getSchema.getColonnes() does not work: not initialised at shapefile reading? -> no attr names; here index hardcoded
+    #for ref in f.getObjetsRef():
+    #    print(ref.getAttributes()[id_index].toString())
+    #print('--')
+    #for comp in f.getObjetsComp():
+    #    print(comp.getAttributes()[id_index].toString())
+    #print('')
+
+    # iterate over single links in the multiline
     for i in range(0,f.getGeom().size()):
         link = "LINESTRING ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),f.getGeom().get(i).coord().getList())))+")"
         geoms.append(shapely.from_wkt(link))
@@ -90,17 +133,16 @@ for f in liensPoly:
 #print(attrs)
 links = geopandas.GeoDataFrame({'geometry':geoms}, crs = crs)
 #print(links)
-# export links to shp
-path = layer1.split("/")
-layer1name = path[len(path)-1]
-path.pop(len(path)-1)
-path2 = layer2.split("/")
-layer2name = path2[len(path2)-1]
-links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
 
+# export links to shp
 # geoxygen export fails
 #AppariementSurfaces.writeShapefile(liensPoly, "./data/bati/appariement.shp")
 #ShapefileWriter.write(liensPoly, "./data/bati/appariement.shp")
+
+links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
+
+# construct the evolution layer
+# FIXME find a way to specify a generic interpretation of matching links
 
 jpype.shutdownJVM()
 
