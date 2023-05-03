@@ -13,9 +13,11 @@ from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader, ShapefileWri
 import sys,os
 
 import shapely
-from shapely import LineString
+from shapely.geometry import LineString
+from shapely import from_wkt
 from osgeo import ogr
 import geopandas
+import numpy
 
 # Parameters of the matching algorithm
 param = ParametresAppSurfaces()
@@ -109,7 +111,7 @@ geoms = list()
 features_stable = list()
 features_split = list()
 features_merged = list()
-features_modified = list()
+features_aggregated = list()
 all_link_targets = set()
 all_link_sources = set()
 
@@ -124,10 +126,40 @@ for f in liensPoly:
     #    print(comp.getAttributes()[id_index].toString())
     #print('')
 
+    # 1--1 : stability
+    if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
+        features_stable.append(f.getObjetsComp()[0])
+        all_link_sources.add(f.getObjetsComp()[0].getAttribute(0))
+        all_link_targets.add(f.getObjetsRef()[0].getAttribute(0))
+
+    # FIXME add comparison geometries and semantic: ex height: important for densification
+
+    # 1 -- n : split
+    if len(f.getObjetsRef())==1 and len(f.getObjetsComp())>1:
+        for comp in f.getObjetsComp():
+            features_split.append(comp)
+            all_link_sources.add(f.getObjetsRef()[0].getAttribute(0))
+            all_link_targets.add(comp.getAttribute(0))
+
+    # m -- 1 : merged
+    if len(f.getObjetsRef())>1 and len(f.getObjetsComp())==1:
+        for ref in f.getObjetsRef():
+            features_merged.append(ref)
+            all_link_sources.add(ref.getAttribute(0))
+            all_link_targets.add(f.getObjetsComp()[0].getAttribute(0))
+
+    # m -- n : aggregation
+    if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
+        for comp in f.getObjetsComp():
+            features_aggregated.append(comp)
+            all_link_targets.add(f.getObjetsComp()[0].getAttribute(0))
+        for ref in f.getObjetsRef():
+            all_link_sources.add(f.getObjetsRef()[0].getAttribute(0))
+
     # iterate over single links in the multiline
     for i in range(0,f.getGeom().size()):
         link = "LINESTRING ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),f.getGeom().get(i).coord().getList())))+")"
-        geoms.append(shapely.from_wkt(link))
+        geoms.append(from_wkt(link))
         attrs.append(list(f.getSchema().getColonnes())) # no attributes?
 
 #print(attrs)
@@ -143,6 +175,36 @@ links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp'
 
 # construct the evolution layer
 # FIXME find a way to specify a generic interpretation of matching links
+#print(features_stable)
+#print(all_link_sources)
+#print(features_split)
+
+# construct appeared/disappeared layer
+
+# 1 -- 0
+features_disappeared = list()
+for f1 in db1:
+    if f1.getAttribute(0) not in all_link_sources:
+        #print(f1.getAttribute(0))
+        features_disappeared.append(f1)
+
+# 0 -- 1
+features_appeared = list()
+for f2 in db2:
+    if f2.getAttribute(0) not in all_link_targets:
+         features_appeared.append(f2)
+
+#print(features_appeared)
+
+# export
+evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
+#evol_attrs = numpy.repeat('appeared',len(features_appeared))+numpy.repeat('disappeared',len(features_disappeared))+numpy.repeat('stable',len(features_stable))+numpy.repeat('split',len(features_split))+numpy.repeat('merged',len(features_merged))+numpy.repeat('aggregated',len(features_aggregated))
+
+for x in evol_layer:
+    wkt = "POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")"
+    #print(wkt)
+    #print(from_wkt(wkt))
+#print([from_wkt() for x in evol_layer])
 
 jpype.shutdownJVM()
 
