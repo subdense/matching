@@ -159,6 +159,7 @@ for f in liensPoly:
     # iterate over single links in the multiline
     for i in range(0,f.getGeom().size()):
         link = "LINESTRING ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),f.getGeom().get(i).coord().getList())))+")"
+        #print(link)
         geoms.append(from_wkt(link))
         attrs.append(list(f.getSchema().getColonnes())) # no attributes?
 
@@ -200,10 +201,12 @@ for f2 in db2:
 evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
 #evol_attrs = numpy.repeat('appeared',len(features_appeared))+numpy.repeat('disappeared',len(features_disappeared))+numpy.repeat('stable',len(features_stable))+numpy.repeat('split',len(features_split))+numpy.repeat('merged',len(features_merged))+numpy.repeat('aggregated',len(features_aggregated))
 
+# this does not work: issue with wkt import (reformatting of coordinates as sci notation)
+#shapely.wkt.loads(["POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")" for x in evol_layer])
 for x in evol_layer:
     wkt = "POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")"
-    #print(wkt)
-    #print(from_wkt(wkt))
+    print(wkt)
+    print(from_wkt(wkt))
 #print([from_wkt() for x in evol_layer])
 
 jpype.shutdownJVM()
