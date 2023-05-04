@@ -199,15 +199,18 @@ for f2 in db2:
 
 # export
 evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
-#evol_attrs = numpy.repeat('appeared',len(features_appeared))+numpy.repeat('disappeared',len(features_disappeared))+numpy.repeat('stable',len(features_stable))+numpy.repeat('split',len(features_split))+numpy.repeat('merged',len(features_merged))+numpy.repeat('aggregated',len(features_aggregated))
+evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.repeat('disappeared',len(features_disappeared)))+list(numpy.repeat('stable',len(features_stable)))+list(numpy.repeat('split',len(features_split)))+list(numpy.repeat('merged',len(features_merged)))+list(numpy.repeat('aggregated',len(features_aggregated)))
 
 # this does not work: issue with wkt import (reformatting of coordinates as sci notation)
 #shapely.wkt.loads(["POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")" for x in evol_layer])
-for x in evol_layer:
-    wkt = "POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")"
-    print(wkt)
-    print(from_wkt(wkt))
-#print([from_wkt() for x in evol_layer])
+
+evol_polys = [from_wkt("POLYGON (("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+"))") for x in evol_layer]
+evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
+
+evol = geopandas.GeoDataFrame({'geometry':evol_polys, 'type':evol_attrs, 'id':evol_ids}, crs = crs)
+
+evol.to_file('/'.join(path)+'/EVOLUTION_'+layer1name+"_"+layer2name+'.shp')
+
 
 jpype.shutdownJVM()
 
