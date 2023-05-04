@@ -129,8 +129,8 @@ for f in liensPoly:
     # 1--1 : stability
     if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
         features_stable.append(f.getObjetsComp()[0])
-        all_link_sources.add(f.getObjetsComp()[0].getAttribute(0))
-        all_link_targets.add(f.getObjetsRef()[0].getAttribute(0))
+        all_link_sources.add(f.getObjetsRef()[0].getAttribute(0))
+        all_link_targets.add(f.getObjetsComp()[0].getAttribute(0))
 
     # FIXME add comparison geometries and semantic: ex height: important for densification
 
