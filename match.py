@@ -204,7 +204,14 @@ evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.re
 # this does not work: issue with wkt import (reformatting of coordinates as sci notation)
 #shapely.wkt.loads(["POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")" for x in evol_layer])
 
-evol_polys = [from_wkt("POLYGON (("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+"))") for x in evol_layer]
+# function to catch errors in wkt (ignore polygon)
+def robust_wkt(x):
+    try:
+        from_wkt("POLYGON (("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+"))")
+    except Exception:
+        pass
+
+evol_polys = [robust_wkt(x) for x in evol_layer]
 evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
 
 evol = geopandas.GeoDataFrame({'geometry':evol_polys, 'type':evol_attrs, 'id':evol_ids}, crs = crs)
