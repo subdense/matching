@@ -1,5 +1,3 @@
-# Boiler plate stuff to start the module
-import jpype
 import jpype.imports
 from jpype.types import *
 import json
@@ -44,8 +42,8 @@ if len(sys.argv)!=3:
     #layer2 = "./data/bati/cadastre_bati_95430.shp"
     #layer1 = "../../../Data/Test/Neudorf/valid_bati12.shp"
     #layer2 = "../../../Data/Test/Neudorf/valid_bati22.shp"
-    layer1 = "./data/bati/neudorf_2012.shp"
-    layer2 = "./data/bati/neudorf_2022.shp"
+    layer1 = "./data/bati/valid_strasbourg_2012.shp"
+    layer2 = "./data/bati/valid_strasbourg_2022.shp"
 else:
     layer1 = sys.argv[1]
     layer2 = sys.argv[2]
@@ -207,6 +205,64 @@ print(json.dumps(geojson_links, indent=2))
 file_name = '/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'-ld.geojson'
 with open(file_name, 'w', encoding='utf-8') as f:
     json.dump(geojson_links, f, ensure_ascii=False, indent=2)
+
+
+
+
+# construct the evolution layer
+# FIXME find a way to specify a generic interpretation of matching links
+#print(features_stable)
+#print(all_link_sources)
+#print(features_split)
+
+# construct appeared/disappeared layer
+
+# 1 -- 0
+features_disappeared = list()
+for f1 in db1:
+    if f1.getAttribute(0) not in all_link_sources:
+        #print(f1.getAttribute(0))
+        features_disappeared.append(f1)
+
+# 0 -- 1
+features_appeared = list()
+for f2 in db2:
+    if f2.getAttribute(0) not in all_link_targets:
+        features_appeared.append(f2)
+
+#print(features_appeared)
+
+# export
+evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
+evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.repeat('disappeared',len(features_disappeared)))+list(numpy.repeat('stable',len(features_stable)))+list(numpy.repeat('split',len(features_split)))+list(numpy.repeat('merged',len(features_merged)))+list(numpy.repeat('aggregated',len(features_aggregated)))
+
+# this does not work: issue with wkt import (reformatting of coordinates as sci notation)
+#shapely.wkt.loads(["POLYGON ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+")" for x in evol_layer])
+
+# function to catch errors in wkt (ignore polygon)
+#def robust_wkt(x):
+#    try:
+#        from_wkt("POLYGON (("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),x.getGeom().coord().getList())))+"))")
+#    except Exception:
+#        pass
+#
+#evol_polys = [robust_wkt(x) for x in evol_layer]
+
+evol_polys = []
+for x in evol_layer:
+    coordinates = []
+    for p in x.getGeom().coord().getList():
+        coordinates.append((p.getX(), p.getY()))
+    polygon = Polygon(coordinates)
+    evol_polys.append(polygon)
+
+evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
+
+evol = geopandas.GeoDataFrame({'geometry':evol_polys, 'type':evol_attrs, 'id':evol_ids}, crs = crs)
+
+evol.to_file('/'.join(path)+'/EVOLUTION_'+layer1name+"_"+layer2name+'.shp')
+
+
 jpype.shutdownJVM()
 
 
