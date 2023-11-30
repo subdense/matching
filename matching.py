@@ -1,18 +1,18 @@
-import jpype.imports
-from jpype.types import *
+# import requires jpype JVM to already run
 import json
 from datetime import datetime
 
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import ParametresAppSurfaces, AppariementSurfaces
-from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader, ShapefileWriter
+from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader
+
 
 import sys,os
 
-from shapely import from_wkt
+from shapely import from_wkt, Polygon
 import geopandas
 import numpy
 
-def default_params:
+def default_params():
     params = dict()
 
     # Parameters of the matching algorithm
@@ -38,8 +38,11 @@ def default_params:
     #layer2 = "./data/bati/cadastre_bati_95430.shp"
     #layer1 = "../../../Data/Test/Neudorf/valid_bati12.shp"
     #layer2 = "../../../Data/Test/Neudorf/valid_bati22.shp"
-    layer1 = "./data/bati/valid_strasbourg_2012.shp"
-    layer2 = "./data/bati/valid_strasbourg_2022.shp"
+    #layer1 = "./data/bati/valid_strasbourg_2012.shp"
+    #layer2 = "./data/bati/valid_strasbourg_2022.shp"
+    # test data by default: committed in data/bati
+    layer1 = "./data/bati/neudorf_2012.shp"
+    layer2 = "./data/bati/neudorf_2022.shp"
 
     params['algo_params']=param
     params['id_index']=id_index
@@ -51,6 +54,7 @@ def default_params:
 
 #'
 #' FIXME handle reprojections
+#' FIXME paths must be the same
 def get_data(params):
     if len(sys.argv)!=3:
         layer1 = params['layer1']
@@ -64,15 +68,18 @@ def get_data(params):
     path2 = layer2.split("/")
     layer2name = os.path.splitext(path2[len(path2)-1])[0]
 
+    path1.pop() # dirty python mutables
+    path = path1
+
     db1 = ShapefileReader.read(layer1, True)
     db2 = ShapefileReader.read(layer2, True)
 
     crs = geopandas.read_file(layer1).crs
 
-    return(layer1name, layer2name, db1, db2, crs)
+    return(layer1name, layer2name, path, db1, db2, crs)
 
 
-def preprocess_data(layer1name, layer2name, db1, db2):
+def preprocess_data(layer1name, layer2name, db1, db2, id_index):
     # hashmap of all features
     #allfeatures = dict()
 
@@ -109,7 +116,7 @@ def preprocess_data(layer1name, layer2name, db1, db2):
 #'
 #' FIXME find a way to specify a generic interpretation of matching links
 #' FIXME add comparison geometries and semantic: ex height: important for densification
-def post_process_links(lienspoly):
+def post_process_links(lienspoly, db1, db2, crs):
     # construct geopandas data frame
     attrs = list()
     geoms = list()
@@ -186,8 +193,15 @@ def post_process_links(lienspoly):
     return(links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared)
 
 
-def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated):
+def export_links(links, layer1name, layer2name, path, params):
+    geojson_export(links, layer1name, layer2name, path, params)
+    # export links to shp
+    links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
+
+
+def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, layer1name, layer2name, path):
     # export
+
     evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
     evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.repeat('disappeared',len(features_disappeared)))+list(numpy.repeat('stable',len(features_stable)))+list(numpy.repeat('split',len(features_split)))+list(numpy.repeat('merged',len(features_merged)))+list(numpy.repeat('aggregated',len(features_aggregated)))
 
@@ -206,8 +220,11 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
     evol.to_file('/'.join(path)+'/EVOLUTION_'+layer1name+"_"+layer2name+'.shp')
 
 
-def geojson_export(links, layer1name, layer2name):
+def geojson_export(links, layer1name, layer2name, path, params):
     links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.geojson', driver='GeoJSON')
+
+    algoparams = params['algo_params']
+
     geojson_links = json.loads(links.to_json())
     geojson_links["@context"] = [
         "https://geojson.org/geojson-ld/geojson-context.jsonld",
@@ -220,26 +237,22 @@ def geojson_export(links, layer1name, layer2name):
         "linking":"https://hal.science/tel-03244834/document",
         "Text":"AppariementSurfaces (Atef Bel Hadj Ali), implemented in https://github.com/IGNF/geoxygene/blob/master/geoxygene-contrib/src/main/java/fr/ign/cogit/geoxygene/contrib/appariement/surfaces/AppariementSurfaces.java",
         "parameters": {
-            "surface_min_intersection": param.surface_min_intersection,
-            "pourcentage_min_intersection": param.pourcentage_min_intersection,
-            "pourcentage_intersection_sur": param.pourcentage_intersection_sur,
-            "minimiseDistanceSurfacique": param.minimiseDistanceSurfacique,
-            "distSurfMaxFinal": param.distSurfMaxFinal,
-            "completudeExactitudeMinFinal": param.completudeExactitudeMinFinal,
-            "regroupementOptimal": param.regroupementOptimal,
-            "filtrageFinal": param.filtrageFinal,
-            "ajoutPetitesSurfaces": param.ajoutPetitesSurfaces,
-            "seuilPourcentageTaillePetitesSurfaces": param.seuilPourcentageTaillePetitesSurfaces,
-            "persistant": param.persistant,
-            "resolutionMin": param.resolutionMin,
-            "resolutionMax": param.resolutionMax
+            "surface_min_intersection": algoparams.surface_min_intersection,
+            "pourcentage_min_intersection": algoparams.pourcentage_min_intersection,
+            "pourcentage_intersection_sur": algoparams.pourcentage_intersection_sur,
+            "minimiseDistanceSurfacique": algoparams.minimiseDistanceSurfacique,
+            "distSurfMaxFinal": algoparams.distSurfMaxFinal,
+            "completudeExactitudeMinFinal": algoparams.completudeExactitudeMinFinal,
+            "regroupementOptimal": algoparams.regroupementOptimal,
+            "filtrageFinal": algoparams.filtrageFinal,
+            "ajoutPetitesSurfaces": algoparams.ajoutPetitesSurfaces,
+            "seuilPourcentageTaillePetitesSurfaces": algoparams.seuilPourcentageTaillePetitesSurfaces,
+            "persistant": algoparams.persistant,
+            "resolutionMin": algoparams.resolutionMin,
+            "resolutionMax": algoparams.resolutionMax
         }
     }
     #print(json.dumps(geojson_links, indent=2))
     file_name = '/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'-ld.geojson'
     with open(file_name, 'w', encoding='utf-8') as f:
         json.dump(geojson_links, f, ensure_ascii=False, indent=2)
-
-
-
-
