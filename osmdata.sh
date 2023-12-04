@@ -1,3 +1,8 @@
+#!/bin/sh
+
+# Test Toulouse center  lat=4.604 lon=1.444
+# ./osmdata.sh 2020 1.444 4.604 100
+
 year=$1
 lon=$2
 lat=$3
