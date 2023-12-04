@@ -13,5 +13,5 @@ do
   rss=`ps aux | grep "python run.py" | grep -v "grep" | grep -v "sh" | awk -F" " '{print $6}'`
   np=`ps aux | grep "python run.py" | grep -v "grep" | grep -v "sh" | wc -l`
   echo "$time;$vsz;$rss;$np" >> profiling.log
-  sleep 1
+  sleep 0.1
 done

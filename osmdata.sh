@@ -15,7 +15,7 @@ echo "[timeout:1800][date:\"$year-01-01T00:00:00Z\"];" >> tmp.overpassql
 echo "(" >> tmp.overpassql
 echo "  way[building~\".\"](around:$radius,$lat,$lon);" >> tmp.overpassql
 echo "  node(around:$radius,$lat,$lon);" >> tmp.overpassql
-echo "  relation(around:$radius,$lat,$lon);" >> tmp.overpassql
+echo "  relation[building~\".\"](around:$radius,$lat,$lon);" >> tmp.overpassql
 echo ");" >> tmp.overpassql
 echo "out;" >> tmp.overpassql
 echo "" >> tmp.overpassql

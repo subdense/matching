@@ -60,9 +60,11 @@ for(city in cities){
     name0 = paste0(t0,'_',name)
     name1 = paste0(t1,'_',name)
     
-    # get data
-    system(paste0('./osmdata.sh ',t0,' ',lon,' ',lat,' ',radius))
-    system(paste0('./osmdata.sh ',t1,' ',lon,' ',lat,' ',radius))
+    # get data - bug ogr2ogr -> use python osmnx
+    #system(paste0('./osmdata.sh ',t0,' ',lon,' ',lat,' ',radius))
+    #system(paste0('./osmdata.sh ',t1,' ',lon,' ',lat,' ',radius))
+    system(paste0('python osmdata.py ',t0,' ',lon,' ',lat,' ',radius))
+    system(paste0('python osmdata.py ',t1,' ',lon,' ',lat,' ',radius))
     
     # run the algorithm with profiling
     system('./profiling.sh', wait=F)
