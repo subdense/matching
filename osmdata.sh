@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Test Toulouse center  lat=4.604 lon=1.444
-# ./osmdata.sh 2020 1.444 4.604 100
+# ./osmdata.sh 2020 1.444 43.604 100
 
 year=$1
 lon=$2
@@ -20,5 +20,8 @@ echo ");" >> tmp.overpassql
 echo "out;" >> tmp.overpassql
 echo "" >> tmp.overpassql
 
+rm "tmp/buildings_"$name".*"
+
 wget -O "tmp/buildings_"$name".osm" --post-file=tmp.overpassql "https://overpass-api.de/api/interpreter"
+#ogr2ogr -skipFailures "tmp/buildings_"$name".shp" "tmp/buildings_"$name".osm" multipolygons -oo USE_CUSTOM_INDEXING=NO
 ogr2ogr -skipFailures "tmp/buildings_"$name".shp" "tmp/buildings_"$name".osm" multipolygons -oo USE_CUSTOM_INDEXING=NO

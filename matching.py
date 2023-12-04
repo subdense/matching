@@ -77,7 +77,7 @@ def get_data(params):
     print(db1.get(0).getSchema().getColonnes()) # empty
     #print(db1.getSchema().getColonnes())
 
-    crs = geopandas.read_file(layer1).crs
+    crs = geopandas.read_file(layer1, engine="pyogrio").crs
 
     return(layer1name, layer2name, path, db1, db2, crs)
 
