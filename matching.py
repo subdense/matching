@@ -69,7 +69,7 @@ def get_data(params):
     layer2name = os.path.splitext(path2[len(path2)-1])[0]
 
     path1.pop() # dirty python mutables
-    path = path1
+    path = [".","output_data"]
 
     db1 = ShapefileReader.read(layer1, True)
     db2 = ShapefileReader.read(layer2, True)
