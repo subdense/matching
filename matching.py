@@ -168,12 +168,17 @@ def post_process_links(lienspoly, db1, db2, crs):
 
         # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
+            # debug: neudorf: (2012 : BATIMENT0000000048824441 BATIMENT0000000048824481) -> (2022 : BATIMENT0000002223308372 BATIMENT0000002223308719 BATIMENT0000002223308720 BATIMENT0000002223308838)
+            #if 'BATIMENT0000000048824441' in (ref.getAttribute(1) for ref in f.getObjetsRef()):
+            #    print("Ref : ")
+            #    print([ref.getAttribute(1) for ref in f.getObjetsRef()])
+            #    print("Comp : ")
+            #    print([ref.getAttribute(1) for ref in f.getObjetsComp()])
             for comp in f.getObjetsComp():
-                #features_aggregated.append(comp)
                 features_merged.append(comp)
-                all_link_targets.add(f.getObjetsComp()[0].getAttribute(0))
+                all_link_targets.add(comp.getAttribute(0))
             for ref in f.getObjetsRef():
-                all_link_sources.add(f.getObjetsRef()[0].getAttribute(0))
+                all_link_sources.add(ref.getAttribute(0))
 
         # iterate over single links in the multiline
         for i in range(0,f.getGeom().size()):
@@ -204,7 +209,7 @@ def export_links(links, layer1name, layer2name, path, params):
     geojson_export(links, layer1name, layer2name, path, params)
     # export links to shp
     links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
-    links.to_file('/'.join(path)+'/EVOLUTION_'+layer1name+"_"+layer2name+'.gpkg', layer='links', driver="GPKG")
+    links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.gpkg', layer='links', driver="GPKG")
 
 
 def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, layer1name, layer2name, path):
