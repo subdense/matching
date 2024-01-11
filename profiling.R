@@ -52,7 +52,7 @@ t0=2015
 t1=2022
 
 res = data.frame()
-for(city in cities){
+for(city in names(cities)){
   for(radius in radiuses){
     lon = cities[[city]][1]
     lat = cities[[city]][2]
@@ -72,6 +72,7 @@ for(city in cities){
     system('./kill.sh')
     profiling <- read.csv('profiling.log',sep=";",header=F)
     system('cat profiling.log; rm profiling.log')
+    res = rbind(res,c(city=city,radius=radius,))
   }
 }
 
