@@ -1,0 +1,4 @@
+{
+    "layer1": "./data/uk/liv_bldg_ha_2011.shp",
+    "layer2": "./data/uk/liv_bldg_ha_2021.shp"
+}
