@@ -1,4 +1,7 @@
 # import requires jpype JVM to already run
+import jpype.imports
+from jpype.types import *
+
 import json
 from datetime import datetime
 
@@ -73,8 +76,8 @@ def get_data(params):
 
     db1 = ShapefileReader.read(layer1, True)
     db2 = ShapefileReader.read(layer2, True)
-    print(db1.get(0).getAttributes())
-    print(db1.get(0).getSchema().getColonnes()) # empty
+    #print(db1.get(0).getAttributes())
+    #print(db1.get(0).getSchema().getColonnes()) # empty
     #print(db1.getSchema().getColonnes())
 
     #crs = geopandas.read_file(layer1, engine="pyogrio").crs
@@ -120,10 +123,12 @@ def preprocess_data(layer1name, layer2name, db1, db2, id_index):
 #'
 #' FIXME find a way to specify a generic interpretation of matching links
 #' FIXME add comparison geometries and semantic: ex height: important for densification
-def post_process_links(lienspoly, db1, db2, crs):
+def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_index):
     # construct geopandas data frame
     attrs = list()
     geoms = list()
+    source_ids = list()
+    target_ids = list()
 
     # to sort links by type
     features_stable = list()
@@ -147,24 +152,24 @@ def post_process_links(lienspoly, db1, db2, crs):
         # 1--1 : stability
         if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
             features_stable.append(f.getObjetsComp()[0])
-            all_link_sources.add(f.getObjetsRef()[0].getAttribute(0))
-            all_link_targets.add(f.getObjetsComp()[0].getAttribute(0))
+            all_link_sources.add(f.getObjetsRef()[0].getAttribute(id_index))
+            all_link_targets.add(f.getObjetsComp()[0].getAttribute(id_index))
 
         # 1 -- n : split
         if len(f.getObjetsRef())==1 and len(f.getObjetsComp())>1:
             for comp in f.getObjetsComp():
                 features_split.append(comp)
-                all_link_sources.add(f.getObjetsRef()[0].getAttribute(0))
-                all_link_targets.add(comp.getAttribute(0))
+                all_link_sources.add(f.getObjetsRef()[0].getAttribute(id_index))
+                all_link_targets.add(comp.getAttribute(id_index))
 
         # m -- 1 : merged
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())==1:
             for ref in f.getObjetsRef():
                 #features_merged.append(ref)
-                all_link_sources.add(ref.getAttribute(0))
+                all_link_sources.add(ref.getAttribute(id_index))
             # for consistency with "merge ~ aggregation", target feature of the link only exported as evolution
             features_merged.append(f.getObjetsComp()[0])
-            all_link_targets.add(f.getObjetsComp()[0].getAttribute(0))
+            all_link_targets.add(f.getObjetsComp()[0].getAttribute(id_index))
 
         # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
@@ -176,29 +181,37 @@ def post_process_links(lienspoly, db1, db2, crs):
             #    print([ref.getAttribute(1) for ref in f.getObjetsComp()])
             for comp in f.getObjetsComp():
                 features_merged.append(comp)
-                all_link_targets.add(comp.getAttribute(0))
+                all_link_targets.add(comp.getAttribute(id_index))
             for ref in f.getObjetsRef():
-                all_link_sources.add(ref.getAttribute(0))
+                all_link_sources.add(ref.getAttribute(id_index))
 
         # iterate over single links in the multiline
         for i in range(0,f.getGeom().size()):
+            #if 'BATIMENT0000000048824441' in (ref.getAttribute(1) for ref in f.getObjetsRef()): # DEBUG
+            #    print(f.getGeom().get(i))
             link = "LINESTRING ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),f.getGeom().get(i).coord().getList())))+")"
             geoms.append(from_wkt(link))
             #attrs.append(list(f.getSchema().getColonnes())) # no attributes?
 
-    links = geopandas.GeoDataFrame({'geometry':geoms}, crs = crs)
+        # links in the multiline have same index than arcs -> construct origin/destination id lists
+        for arc in f.getArcs():
+            lien = jpype.JObject(arc.getCorrespondant(0), 'fr.ign.cogit.geoxygene.contrib.appariement.Lien')
+            source_ids.append(layer1name+':'+str(lien.getObjetsRef()[0].getAttribute(id_index)))
+            target_ids.append(layer2name+':'+str(lien.getObjetsComp()[0].getAttribute(id_index)))
+
+    links = geopandas.GeoDataFrame({'geometry':geoms, 'source_id': source_ids, 'target_ids':target_ids}, crs = crs)
 
     # construct appeared/disappeared layer
     # 1 -- 0
     features_disappeared = list()
     for f1 in db1:
-        if f1.getAttribute(0) not in all_link_sources:
+        if f1.getAttribute(id_index) not in all_link_sources:
             #print(f1.getAttribute(0))
             features_disappeared.append(f1)
     # 0 -- 1
     features_appeared = list()
     for f2 in db2:
-        if f2.getAttribute(0) not in all_link_targets:
+        if f2.getAttribute(id_index) not in all_link_targets:
             features_appeared.append(f2)
 
 
