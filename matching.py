@@ -340,6 +340,9 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
 
 
 def export_links(links, layer1name, layer2name, path, params):
+    output_dir = '/'.join(path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     geojson_export(links, layer1name, layer2name, path, params)
     # export links to shp
     links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
