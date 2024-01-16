@@ -43,7 +43,7 @@ layer2name, path_, db2, crs_ = matching.get_data_and_preprocess(params, "layer2"
 # db2 = matching.preprocess_data(layer2name, db2, id_index = 1)
 # print(str(datetime.datetime.now())+" - preprocess 2 done")
 #db1, db2, allfeatures = matching.preprocess_data(layer1name, layer2name, db1, db2)
-# db1, db2 = matching.preprocess_data(layer1name, layer2name, db1, db2, id_index = 1)
+# db1, db2 = matching.preprocess_data(layer1name, layer2name, db1, db2, id_index = params['id_index'])
 
 print(str(datetime.datetime.now())+" - preprocess done")
 print_memory()
@@ -51,7 +51,7 @@ print_memory()
 liensPoly = AppariementSurfaces.appariementSurfaces(db1, db2, params['algo_params'])
 print(str(datetime.datetime.now())+" - matching done")
 print_memory()
-links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs)
+links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, layer1name, layer2name, params['id_index'])
 print(str(datetime.datetime.now())+" - post_process_links done")
 print_memory()
 
