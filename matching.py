@@ -3,17 +3,25 @@ import jpype.imports
 from jpype.types import *
 
 import json
-from datetime import datetime
+
+import jpype
 
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import ParametresAppSurfaces, AppariementSurfaces
 from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader
-
+from fr.ign.cogit.geoxygene.feature import SchemaDefaultFeature, DefaultFeature, Population
+from fr.ign.cogit.geoxygene.api.spatial.coordgeom import IPolygon
+from fr.ign.cogit.geoxygene.schema.schemaConceptuelISOJeu import FeatureType, AttributeType
+from java.util import HashMap
+from fr.ign.cogit.geoxygene.util.index import Tiling, STRtreeJts
+from fr.ign.cogit.geoxygene.util.conversion import WktGeOxygene
 
 import sys,os
+from os.path import exists
 
 from shapely import from_wkt, Polygon
 import geopandas
 import numpy
+from datetime import datetime
 
 def default_params():
     params = dict()
@@ -35,14 +43,8 @@ def default_params():
     param.resolutionMax = 11
 
     # param: index of IDs (same for both layers)
-    id_index = 1
+    id_index = 0
 
-    #layer1 = "./data/bati/bati_95430.shp"
-    #layer2 = "./data/bati/cadastre_bati_95430.shp"
-    #layer1 = "../../../Data/Test/Neudorf/valid_bati12.shp"
-    #layer2 = "../../../Data/Test/Neudorf/valid_bati22.shp"
-    #layer1 = "./data/bati/valid_strasbourg_2012.shp"
-    #layer2 = "./data/bati/valid_strasbourg_2022.shp"
     # test data by default: committed in data/bati
     layer1 = "./data/bati/neudorf_2012.shp"
     layer2 = "./data/bati/neudorf_2022.shp"
@@ -51,11 +53,14 @@ def default_params():
     params['id_index']=id_index
     params['layer1']=layer1
     params['layer2']=layer2
+    if exists('./data/parameters.json'):
+        with open('./data/parameters.json') as parameter_file:
+            params_from_file = json.load(parameter_file)
+            print(params_from_file)
+            params |= params_from_file
 
     return(params)
 
-
-#'
 #' FIXME handle reprojections
 #' FIXME paths must be the same
 def get_data(params):
@@ -74,52 +79,163 @@ def get_data(params):
     path1.pop() # dirty python mutables
     path = [".","output_data"]
 
+    print("READ DB1")
     db1 = ShapefileReader.read(layer1, True)
+    print("READ DB2")
     db2 = ShapefileReader.read(layer2, True)
-    #print(db1.get(0).getAttributes())
-    #print(db1.get(0).getSchema().getColonnes()) # empty
-    #print(db1.getFeatureType().getFeatureAttributes())
-    #print(db1.getSchema().getColonnes())
+    
+    # get the list of feature attributes for db1
+    print("DB1 attributes = " + str(db1.getFeatureType().getFeatureAttributes()))
+    # get the list of feature attributes for db2
+    print("DB2 attributes = " + str(db2.getFeatureType().getFeatureAttributes()))
 
     #crs = geopandas.read_file(layer1, engine="pyogrio").crs
     crs = geopandas.read_file(layer1, rows = 1).crs
 
     return(layer1name, layer2name, path, db1, db2, crs)
 
+def get_data_and_preprocess(params, layer):
+    layer = params[layer]
+
+    path = layer.split("/")
+    layername = os.path.splitext(path[len(path)-1])[0]
+
+    path.pop() # dirty python mutables
+    path = [".","output_data"]
+
+    print(str(datetime.now())+ " - READ " + layer)
+    # db = ShapefileReader.read(layer, True)
+    db = geopandas.read_file(layer)
+    crs = db.crs
+    # get the list of feature attributes for db1
+    # print(str(datetime.datetime.now())+" - DB attributes = " + str(db.getFeatureType().getFeatureAttributes()))
+    newdb = preprocess_layer(layername, db)
+    print(str(datetime.now())+" - preprocess done")
+    return (layername, path, newdb, crs)
+
+# def preprocess_layer(layername, db, id_attribute):
+#     newFeatureType = FeatureType()
+#     newFeatureType.setTypeName("building")
+#     newFeatureType.setGeometryType(IPolygon.class_)
+#     id = AttributeType("id", "String")
+#     newFeatureType.addFeatureAttribute(id)
+#     schema = SchemaDefaultFeature()
+#     schema.setFeatureType(newFeatureType)
+#     newFeatureType.setSchema(schema)
+#     attLookup = HashMap()#<jpype.JInt, jpype.JString[:]>(0)
+#     attLookup.put(jpype.JInt(0), jpype.JString[:]@[id.getNomField(), id.getMemberName()])
+#     schema.setAttLookup(attLookup)
+#     newdb = Population(False, layername, DefaultFeature.class_, True)
+#     newdb.setFeatureType(newFeatureType)
+#     # reduce multipolygons into single polygons
+#     for feat in db:
+#         # print(str(feat1.getAttributes()))
+#         if feat.getAttributes()[id_attribute]:
+#             for i in range(0,feat.getGeom().size()):
+#                 currentid = layername+"-"+str(feat.getAttributes()[id_attribute].toString())+"-"+str(i)
+#                 n = newdb.nouvelElement(feat.getGeom().get(i))
+#                 n.setSchema(schema)
+#                 attributes = jpype.JObject[:]@[currentid]
+#                 n.setAttributes(attributes)
+#         # else:
+#             # print("no attribute " + str(id_attribute) + " for " + str(feat.toString()))
+#             # newdb.initSpatialIndex(Tiling.class_, False)
+#             # print(str(datetime.datetime.now())+" - initSpatialIndex done")
+#             # return newdb
+#     index = STRtreeJts(newdb)
+#     newdb.setSpatialIndexToExisting(index)
+#     print(str(datetime.datetime.now())+" - initSpatialIndex done")
+#     # print("db preprocessed")
+#     return newdb
+def preprocess_layer(layername, layer):
+    newFeatureType = FeatureType()
+    newFeatureType.setTypeName("building")
+    newFeatureType.setGeometryType(IPolygon.class_)
+    id = AttributeType("id", "String")
+    newFeatureType.addFeatureAttribute(id)
+    schema = SchemaDefaultFeature()
+    schema.setFeatureType(newFeatureType)
+    newFeatureType.setSchema(schema)
+    attLookup = HashMap()#<jpype.JInt, jpype.JString[:]>(0)
+    attLookup.put(jpype.JInt(0), jpype.JString[:]@[id.getNomField(), id.getMemberName()])
+    schema.setAttLookup(attLookup)
+    newdb = Population(False, layername, DefaultFeature.class_, True)
+    newdb.setFeatureType(newFeatureType)
+    for index, feature in layer.iterrows():
+        n = newdb.nouvelElement(WktGeOxygene.makeGeOxygene(feature["geometry"].wkt))
+        n.setSchema(schema)
+        attributes = jpype.JObject[:]@[feature["fid"]]
+        n.setAttributes(attributes)
+    index = STRtreeJts(newdb)
+    newdb.setSpatialIndexToExisting(index)
+    print(str(datetime.now())+" - initSpatialIndex done with " + str(newdb.size()))
+    return newdb
 
 def preprocess_data(layer1name, layer2name, db1, db2, id_index):
     # hashmap of all features
     #allfeatures = dict()
+    newFeatureType = FeatureType()
+    newFeatureType.setTypeName("building")
+    newFeatureType.setGeometryType(IPolygon.class_)
+    id = AttributeType("id", "String")
+    newFeatureType.addFeatureAttribute(id)
+    schema = SchemaDefaultFeature()
+    schema.setFeatureType(newFeatureType)
+    newFeatureType.setSchema(schema)
+
+    attLookup = HashMap()#<jpype.JInt, jpype.JString[:]>(0)
+    attLookup.put(jpype.JInt(0), jpype.JString[:]@[id.getNomField(), id.getMemberName()])
+    schema.setAttLookup(attLookup)
+    newdb1 = Population(False, "db1", DefaultFeature.class_, True)
+    newdb1.setFeatureType(newFeatureType)
 
     # reduce multipolygons into single polygons
-    l1 = list()
+    # l1 = list()
     for feat1 in db1:
         for i in range(0,feat1.getGeom().size()):
-            single_feat = feat1.cloneGeom()
+            single_feat = feat1#.cloneGeom()
             currentid = layer1name+"-"+str(single_feat.getAttributes()[id_index].toString())+"-"+str(i)
-            single_feat.setGeom(feat1.getGeom().get(i))
-            single_feat.setAttribute(0, currentid) # overwrite unused attr fid
-            l1.append(single_feat)
-            #allfeatures[currentid] = single_feat
-    db1.clear()
-    for f1 in l1:
-        db1.add(f1)
+            # single_feat.setGeom(feat1.getGeom().get(i))
+            # single_feat.setAttribute(0, currentid) # overwrite unused attr fid
+            # l1.append(single_feat)
 
-    l2 = list()
+            n = newdb1.nouvelElement(feat1.getGeom().get(i))
+            n.setSchema(schema)
+            attributes = jpype.JObject[:]@[currentid]
+            n.setAttributes(attributes)
+
+            #allfeatures[currentid] = single_feat
+    # db1.clear()
+    # for f1 in l1:
+    #     db1.add(f1)
+    newdb1.initSpatialIndex(Tiling.class_, False)
+    print("db1 preprocessed")
+    newdb2 = Population(False, "db2", DefaultFeature.class_, True)#<DefaultFeature>
+    newdb2.setFeatureType(newFeatureType)
+    # l2 = list()
     for feat2 in db2:
         for i in range(0,feat2.getGeom().size()):
-            single_feat = feat2.cloneGeom()
+            single_feat = feat2#.cloneGeom()
             currentid = layer2name+"-"+str(single_feat.getAttributes()[id_index].toString())+"-"+str(i)
-            single_feat.setGeom(feat2.getGeom().get(i))
-            single_feat.setAttribute(0, currentid)
-            l2.append(single_feat)
-            #allfeatures[currentid] = single_feat
-    db2.clear()
-    for f2 in l2:
-        db2.add(f2)
+            # single_feat.setGeom(feat2.getGeom().get(i))
+            # single_feat.setAttribute(0, currentid)
+            # l2.append(single_feat)
+            n = newdb2.nouvelElement(feat2.getGeom().get(i))
+            n.setSchema(schema)
+            attributes = jpype.JObject[:]@[currentid]
+            n.setAttributes(attributes)
 
+            #allfeatures[currentid] = single_feat
+    # db2.clear()
+    # for f2 in l2:
+    #     db2.add(f2)
+    newdb2.initSpatialIndex(Tiling.class_, False)
+    print("db2 preprocessed")
+    # force cleanup
+    del db1
+    del db2
     #return(db1, db2, allfeatures)
-    return(db1, db2)
+    return(newdb1, newdb2)
 
 #'
 #' FIXME find a way to specify a generic interpretation of matching links
