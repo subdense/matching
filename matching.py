@@ -78,10 +78,11 @@ def get_data(params):
     db2 = ShapefileReader.read(layer2, True)
     #print(db1.get(0).getAttributes())
     #print(db1.get(0).getSchema().getColonnes()) # empty
+    #print(db1.getFeatureType().getFeatureAttributes())
     #print(db1.getSchema().getColonnes())
 
     #crs = geopandas.read_file(layer1, engine="pyogrio").crs
-    crs = geopandas.read_file(layer1).crs
+    crs = geopandas.read_file(layer1, rows = 1).crs
 
     return(layer1name, layer2name, path, db1, db2, crs)
 
