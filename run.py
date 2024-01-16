@@ -48,6 +48,8 @@ layer2name, path_, db2, crs_ = matching.get_data_and_preprocess(params, "layer2"
 print(str(datetime.datetime.now())+" - preprocess done")
 print_memory()
 # call to geoxygene matching algorithm
+# from org.apache.logging.log4j import Level
+# AppariementSurfaces.LOGGER.setLevel(Level.DEBUG)
 liensPoly = AppariementSurfaces.appariementSurfaces(db1, db2, params['algo_params'])
 print(str(datetime.datetime.now())+" - matching done")
 print_memory()

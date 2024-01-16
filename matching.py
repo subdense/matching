@@ -30,7 +30,7 @@ def default_params():
     param = ParametresAppSurfaces()
     param.surface_min_intersection = 1
     param.pourcentage_min_intersection = 0.2
-    param.pourcentage_intersection_sur = 0.8
+    param.pourcentage_intersection_sur = 0.5
     param.minimiseDistanceSurfacique = True
     param.distSurfMaxFinal = 0.6
     param.completudeExactitudeMinFinal = 0.3
