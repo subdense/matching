@@ -58,7 +58,7 @@ def default_params():
             params_from_file = json.load(parameter_file)
             print(params_from_file)
             params |= params_from_file
-    
+
     return(params)
 
 #' FIXME handle reprojections
@@ -83,13 +83,14 @@ def get_data(params):
     db1 = ShapefileReader.read(layer1, True)
     print("READ DB2")
     db2 = ShapefileReader.read(layer2, True)
+    
     # get the list of feature attributes for db1
     print("DB1 attributes = " + str(db1.getFeatureType().getFeatureAttributes()))
     # get the list of feature attributes for db2
     print("DB2 attributes = " + str(db2.getFeatureType().getFeatureAttributes()))
 
     #crs = geopandas.read_file(layer1, engine="pyogrio").crs
-    crs = geopandas.read_file(layer1).crs
+    crs = geopandas.read_file(layer1, rows = 1).crs
 
     return(layer1name, layer2name, path, db1, db2, crs)
 
@@ -181,7 +182,7 @@ def preprocess_data(layer1name, layer2name, db1, db2, id_index):
     schema = SchemaDefaultFeature()
     schema.setFeatureType(newFeatureType)
     newFeatureType.setSchema(schema)
-                
+
     attLookup = HashMap()#<jpype.JInt, jpype.JString[:]>(0)
     attLookup.put(jpype.JInt(0), jpype.JString[:]@[id.getNomField(), id.getMemberName()])
     schema.setAttLookup(attLookup)
