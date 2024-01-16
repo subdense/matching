@@ -3,7 +3,6 @@ import jpype.imports
 from jpype.types import *
 
 import json
-from datetime import datetime
 
 import jpype
 
@@ -14,6 +13,7 @@ from fr.ign.cogit.geoxygene.api.spatial.coordgeom import IPolygon
 from fr.ign.cogit.geoxygene.schema.schemaConceptuelISOJeu import FeatureType, AttributeType
 from java.util import HashMap
 from fr.ign.cogit.geoxygene.util.index import Tiling, STRtreeJts
+from fr.ign.cogit.geoxygene.util.conversion import WktGeOxygene
 
 import sys,os
 from os.path import exists
@@ -21,7 +21,7 @@ from os.path import exists
 from shapely import from_wkt, Polygon
 import geopandas
 import numpy
-import datetime
+from datetime import datetime
 
 def default_params():
     params = dict()
@@ -43,7 +43,7 @@ def default_params():
     param.resolutionMax = 11
 
     # param: index of IDs (same for both layers)
-    id_index = 1
+    id_index = 0
 
     # test data by default: committed in data/bati
     layer1 = "./data/bati/neudorf_2012.shp"
@@ -102,16 +102,51 @@ def get_data_and_preprocess(params, layer):
     path.pop() # dirty python mutables
     path = [".","output_data"]
 
-    print(str(datetime.datetime.now())+ " - READ " + layer)
-    db = ShapefileReader.read(layer, True)
+    print(str(datetime.now())+ " - READ " + layer)
+    # db = ShapefileReader.read(layer, True)
+    db = geopandas.read_file(layer)
+    crs = db.crs
     # get the list of feature attributes for db1
-    print(str(datetime.datetime.now())+" - DB attributes = " + str(db.getFeatureType().getFeatureAttributes()))
-    newdb = preprocess_layer(layername, db, 0)
-    print(str(datetime.datetime.now())+" - preprocess done")
-    crs = geopandas.read_file(layer,rows=1).crs
+    # print(str(datetime.datetime.now())+" - DB attributes = " + str(db.getFeatureType().getFeatureAttributes()))
+    newdb = preprocess_layer(layername, db)
+    print(str(datetime.now())+" - preprocess done")
     return (layername, path, newdb, crs)
 
-def preprocess_layer(layername, db, id_attribute):
+# def preprocess_layer(layername, db, id_attribute):
+#     newFeatureType = FeatureType()
+#     newFeatureType.setTypeName("building")
+#     newFeatureType.setGeometryType(IPolygon.class_)
+#     id = AttributeType("id", "String")
+#     newFeatureType.addFeatureAttribute(id)
+#     schema = SchemaDefaultFeature()
+#     schema.setFeatureType(newFeatureType)
+#     newFeatureType.setSchema(schema)
+#     attLookup = HashMap()#<jpype.JInt, jpype.JString[:]>(0)
+#     attLookup.put(jpype.JInt(0), jpype.JString[:]@[id.getNomField(), id.getMemberName()])
+#     schema.setAttLookup(attLookup)
+#     newdb = Population(False, layername, DefaultFeature.class_, True)
+#     newdb.setFeatureType(newFeatureType)
+#     # reduce multipolygons into single polygons
+#     for feat in db:
+#         # print(str(feat1.getAttributes()))
+#         if feat.getAttributes()[id_attribute]:
+#             for i in range(0,feat.getGeom().size()):
+#                 currentid = layername+"-"+str(feat.getAttributes()[id_attribute].toString())+"-"+str(i)
+#                 n = newdb.nouvelElement(feat.getGeom().get(i))
+#                 n.setSchema(schema)
+#                 attributes = jpype.JObject[:]@[currentid]
+#                 n.setAttributes(attributes)
+#         # else:
+#             # print("no attribute " + str(id_attribute) + " for " + str(feat.toString()))
+#             # newdb.initSpatialIndex(Tiling.class_, False)
+#             # print(str(datetime.datetime.now())+" - initSpatialIndex done")
+#             # return newdb
+#     index = STRtreeJts(newdb)
+#     newdb.setSpatialIndexToExisting(index)
+#     print(str(datetime.datetime.now())+" - initSpatialIndex done")
+#     # print("db preprocessed")
+#     return newdb
+def preprocess_layer(layername, layer):
     newFeatureType = FeatureType()
     newFeatureType.setTypeName("building")
     newFeatureType.setGeometryType(IPolygon.class_)
@@ -125,25 +160,14 @@ def preprocess_layer(layername, db, id_attribute):
     schema.setAttLookup(attLookup)
     newdb = Population(False, layername, DefaultFeature.class_, True)
     newdb.setFeatureType(newFeatureType)
-    # reduce multipolygons into single polygons
-    for feat in db:
-        # print(str(feat1.getAttributes()))
-        if feat.getAttributes()[id_attribute]:
-            for i in range(0,feat.getGeom().size()):
-                currentid = layername+"-"+str(feat.getAttributes()[id_attribute].toString())+"-"+str(i)
-                n = newdb.nouvelElement(feat.getGeom().get(i))
-                n.setSchema(schema)
-                attributes = jpype.JObject[:]@[currentid]
-                n.setAttributes(attributes)
-        # else:
-            # print("no attribute " + str(id_attribute) + " for " + str(feat.toString()))
-            # newdb.initSpatialIndex(Tiling.class_, False)
-            # print(str(datetime.datetime.now())+" - initSpatialIndex done")
-            # return newdb
+    for index, feature in layer.iterrows():
+        n = newdb.nouvelElement(WktGeOxygene.makeGeOxygene(feature["geometry"].wkt))
+        n.setSchema(schema)
+        attributes = jpype.JObject[:]@[feature["fid"]]
+        n.setAttributes(attributes)
     index = STRtreeJts(newdb)
     newdb.setSpatialIndexToExisting(index)
-    print(str(datetime.datetime.now())+" - initSpatialIndex done")
-    # print("db preprocessed")
+    print(str(datetime.now())+" - initSpatialIndex done with " + str(newdb.size()))
     return newdb
 
 def preprocess_data(layer1name, layer2name, db1, db2, id_index):
