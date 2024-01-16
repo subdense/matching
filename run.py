@@ -29,7 +29,7 @@ from java.lang import Runtime, Long
 
 import matching
 
-params = matching.default_params()
+params = matching.get_params()
 
 print_memory()
 print(str(datetime.datetime.now())+" - getdata")

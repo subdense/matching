@@ -23,7 +23,7 @@ import geopandas
 import numpy
 from datetime import datetime
 
-def default_params():
+def get_params():
     params = dict()
 
     # Parameters of the matching algorithm
@@ -58,40 +58,45 @@ def default_params():
             params_from_file = json.load(parameter_file)
             print(params_from_file)
             params |= params_from_file
-    
+
+    if len(sys.argv)==3:
+        params['layer1'] = sys.argv[1]
+        params['layer2'] = sys.argv[2]
+
     return(params)
 
 #' FIXME handle reprojections
 #' FIXME paths must be the same
-def get_data(params):
-    if len(sys.argv)!=3:
-        layer1 = params['layer1']
-        layer2 = params['layer2']
-    else:
-        layer1 = sys.argv[1]
-        layer2 = sys.argv[2]
-
-    path1 = layer1.split("/")
-    layer1name = os.path.splitext(path1[len(path1)-1])[0]
-    path2 = layer2.split("/")
-    layer2name = os.path.splitext(path2[len(path2)-1])[0]
-
-    path1.pop() # dirty python mutables
-    path = [".","output_data"]
-
-    print("READ DB1")
-    db1 = ShapefileReader.read(layer1, True)
-    print("READ DB2")
-    db2 = ShapefileReader.read(layer2, True)
-    # get the list of feature attributes for db1
-    print("DB1 attributes = " + str(db1.getFeatureType().getFeatureAttributes()))
-    # get the list of feature attributes for db2
-    print("DB2 attributes = " + str(db2.getFeatureType().getFeatureAttributes()))
-
-    #crs = geopandas.read_file(layer1, engine="pyogrio").crs
-    crs = geopandas.read_file(layer1).crs
-
-    return(layer1name, layer2name, path, db1, db2, crs)
+#def get_data(params):
+#    if len(sys.argv)!=3:
+#        layer1 = params['layer1']
+#        layer2 = params['layer2']
+#    else:
+#        layer1 = sys.argv[1]
+#        layer2 = sys.argv[2]
+#
+#    path1 = layer1.split("/")
+#    layer1name = os.path.splitext(path1[len(path1)-1])[0]
+#    path2 = layer2.split("/")
+#    layer2name = os.path.splitext(path2[len(path2)-1])[0]
+#
+#    path1.pop() # dirty python mutables
+#    path = [".","output_data"]
+#
+#    print("READ DB1")
+#    db1 = ShapefileReader.read(layer1, True)
+#    print("READ DB2")
+#    db2 = ShapefileReader.read(layer2, True)
+#
+#    # get the list of feature attributes for db1
+#    print("DB1 attributes = " + str(db1.getFeatureType().getFeatureAttributes()))
+#    # get the list of feature attributes for db2
+#    print("DB2 attributes = " + str(db2.getFeatureType().getFeatureAttributes()))
+#
+#    #crs = geopandas.read_file(layer1, engine="pyogrio").crs
+#    crs = geopandas.read_file(layer1, rows = 1).crs
+#
+#    return(layer1name, layer2name, path, db1, db2, crs)
 
 def get_data_and_preprocess(params, layer):
     layer = params[layer]
@@ -181,7 +186,7 @@ def preprocess_data(layer1name, layer2name, db1, db2, id_index):
     schema = SchemaDefaultFeature()
     schema.setFeatureType(newFeatureType)
     newFeatureType.setSchema(schema)
-                
+
     attLookup = HashMap()#<jpype.JInt, jpype.JString[:]>(0)
     attLookup.put(jpype.JInt(0), jpype.JString[:]@[id.getNomField(), id.getMemberName()])
     schema.setAttLookup(attLookup)
@@ -335,6 +340,9 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
 
 
 def export_links(links, layer1name, layer2name, path, params):
+    output_dir = '/'.join(path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     geojson_export(links, layer1name, layer2name, path, params)
     # export links to shp
     links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
