@@ -31,7 +31,7 @@ import matching
 
 params = matching.get_params()
 
-print_memory()
+# print_memory()
 print(str(datetime.datetime.now())+" - getdata")
 layer1name, path, db1, crs = matching.get_data_and_preprocess(params, "layer1")
 layer2name, path_, db2, crs_ = matching.get_data_and_preprocess(params, "layer2")
@@ -46,23 +46,23 @@ layer2name, path_, db2, crs_ = matching.get_data_and_preprocess(params, "layer2"
 # db1, db2 = matching.preprocess_data(layer1name, layer2name, db1, db2, id_index = params['id_index'])
 
 print(str(datetime.datetime.now())+" - preprocess done")
-print_memory()
+# print_memory()
 # call to geoxygene matching algorithm
 # from org.apache.logging.log4j import Level
 # AppariementSurfaces.LOGGER.setLevel(Level.DEBUG)
 liensPoly = AppariementSurfaces.appariementSurfaces(db1, db2, params['algo_params'])
 print(str(datetime.datetime.now())+" - matching done")
-print_memory()
+# print_memory()
 links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, layer1name, layer2name, params['id_index'])
 print(str(datetime.datetime.now())+" - post_process_links done")
-print_memory()
+# print_memory()
 
 matching.export_links(links, layer1name, layer2name, path, params)
 print(str(datetime.datetime.now())+" - export_links done")
-print_memory()
+# print_memory()
 
-matching.export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, layer1name, layer2name, path)
+matching.export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, layer1name, layer2name, db1, db2, path)
 print(str(datetime.datetime.now())+" - export done")
-print_memory()
+# print_memory()
 
 jpype.shutdownJVM()
