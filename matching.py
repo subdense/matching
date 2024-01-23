@@ -27,7 +27,7 @@ import numpy
 from datetime import datetime
 from progress.bar import Bar
 
-def get_params():
+def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, attributes = None, output_prefix = None):
     params = dict()
 
     # Parameters of the matching algorithm
@@ -63,38 +63,35 @@ def get_params():
     params['id_index']=id_index
     params['layer1']=layer1
     params['layer2']=layer2
-    if exists('./data/parameters.json'):
-        with open('./data/parameters.json') as parameter_file:
-            params_from_file = json.load(parameter_file)
-            params |= params_from_file
-
-    if len(sys.argv)>=3:
-        params['layer1'] = sys.argv[1]
-        params['layer2'] = sys.argv[2]
-    if len(sys.argv)>=4:
-        params['crs'] = sys.argv[3]
-    if len(sys.argv)>=5:
-        print(sys.argv[4])
-        params['attributes'] = json.loads(sys.argv[4])
+    # if exists('./data/parameters.json'):
+    #     with open('./data/parameters.json') as parameter_file:
+    #         params_from_file = json.load(parameter_file)
+    #         params |= params_from_file
+    if parameter_file:
+        params_from_file = json.load(parameter_file)
+        params |= params_from_file
+    if layer1:
+        params['layer1'] = layer1
+    if layer2:
+        params['layer2'] = layer2
+    if crs:
+        params['crs'] = crs
+    if attributes:
+        params['attributes'] = json.loads(attributes)
+    if output_prefix:
+        params['output_prefix'] = output_prefix
 
     return(params)
 
 #' FIXME handle reprojections
 #' FIXME paths must be the same
 
-def get_data_and_preprocess(params, layer):
-    layer = params[layer]
-
-    path = layer.split("/")
-    layername = os.path.splitext(path[len(path)-1])[0]
-
-    path.pop() # dirty python mutables
+def get_data_and_preprocess(params, layername):
+    layer = params[layername]
     path = [".","output_data"]
-
     attributes = []
     if "attributes" in params:
         attributes = params["attributes"]
-
     print(str(datetime.now())+ " - READ " + layer)
     db = geopandas.read_file(layer, engine="pyogrio", columns = attributes, fid_as_index=True)
     print(db.head())
@@ -163,7 +160,7 @@ def preprocess_layer(layername, layer, attributes):
 #'
 #' FIXME find a way to specify a generic interpretation of matching links
 #' FIXME add comparison geometries and semantic: ex height: important for densification
-def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_index):
+def post_process_links(lienspoly, db1, db2, crs, id_index):
     # construct geopandas data frame
     attrs = list()
     geoms = list()
@@ -250,8 +247,8 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
         # links in the multiline have same index than arcs -> construct origin/destination id lists
         for arc in f.getArcs():
             lien = jpype.JObject(arc.getCorrespondant(0), 'fr.ign.cogit.geoxygene.contrib.appariement.Lien')
-            source_ids.append(layer1name+':'+str(lien.getObjetsRef()[0].getAttribute(id_index)))
-            target_ids.append(layer2name+':'+str(lien.getObjetsComp()[0].getAttribute(id_index)))
+            source_ids.append(str(lien.getObjetsRef()[0].getAttribute(id_index)))
+            target_ids.append(str(lien.getObjetsComp()[0].getAttribute(id_index)))
 
     links = geopandas.GeoDataFrame({'geometry':geoms, 'source_id': source_ids, 'target_ids':target_ids}, crs = crs)
 
@@ -276,16 +273,16 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
     return(links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared)
 
 
-def export_links(links, layer1name, layer2name, path, params):
+def export_links(links, path, params):
     output_dir = '/'.join(path)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    geojson_export(links, layer1name, layer2name, path, params)
+    geojson_export(links, path, params)
     # export links to shp
-    links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
-    links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.gpkg', layer='links', driver="GPKG")
+    # links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
+    links.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='links', driver="GPKG")
 
-def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, layer1name, layer2name, path, params):
+def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params):
     # export
 
     evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
@@ -355,12 +352,13 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
     for a, v in attributes.items():
         evol[a] = v
 
-    evol.to_file('/'.join(path)+'/EVOLUTION_'+layer1name+"_"+layer2name+'.shp')
-    evol.to_file('/'.join(path)+'/EVOLUTION_'+layer1name+"_"+layer2name+'.gpkg', layer='evolution', driver="GPKG")
+    prefix = params["output_prefix"]
+    # evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.shp')
+    evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.gpkg', layer='evolution', driver="GPKG")
 
 
-def geojson_export(links, layer1name, layer2name, path, params):
-    links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.geojson', driver='GeoJSON')
+def geojson_export(links, path, params):
+    links.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.geojson', driver='GeoJSON')
 
     algoparams = params['algo_params']
 
@@ -392,6 +390,6 @@ def geojson_export(links, layer1name, layer2name, path, params):
         }
     }
     #print(json.dumps(geojson_links, indent=2))
-    file_name = '/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'-ld.geojson'
+    file_name = '/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS-ld.geojson'
     with open(file_name, 'w', encoding='utf-8') as f:
         json.dump(geojson_links, f, ensure_ascii=False, indent=2)

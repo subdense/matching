@@ -2,6 +2,7 @@ import jpype.imports
 from jpype.types import *
 import os
 import datetime
+import argparse
 
 def print_memory():
     # Total number of processors or cores available to the JVM
@@ -18,23 +19,40 @@ def print_memory():
     # Total memory currently in use by the JVM
     print("Total memory (bytes): " + str(Runtime.getRuntime().totalMemory()))
 
+parser = argparse.ArgumentParser(description='Process the matching of two datasets.')
+parser.add_argument('-parameters', type = argparse.FileType('r'), required=False, help='a json parameter file')
+parser.add_argument('-layer1', type = argparse.FileType('r'), required=True, help='layer1')
+parser.add_argument('-layer2', type = argparse.FileType('r'), required=True, help='layer2')
+parser.add_argument('-crs', type=str, required=False, help='crs')
+parser.add_argument('-attributes', type=str, required=False, help='attributes as json array string')
+parser.add_argument('-output_prefix', type=str, required=True, help='prefix for output files')
+parser.add_argument('-java_memory', type=str, required=False, default = "16g", help='java memory to allocate')
+
+args = parser.parse_args()
+
 if jpype.isJVMStarted():
     jpype.shutdownJVM()
 
 #jpype.startJVM(jpype.getDefaultJVMPath(),f"-Djava.class.path={os.path.dirname(__file__)}/jars/geoxygene-matching-1.10-SNAPSHOT.jar")
-jpype.startJVM(jpype.getDefaultJVMPath(),f"-Djava.class.path={os.path.dirname(__file__)}/jars/geoxygene-matching-1.10-SNAPSHOT.jar","-Xmx16g")
+jpype.startJVM(jpype.getDefaultJVMPath(),f"-Djava.class.path={os.path.dirname(__file__)}/jars/geoxygene-matching-1.10-SNAPSHOT.jar",f"-Xmx{args.java_memory}")
 
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import AppariementSurfaces
 from java.lang import Runtime, Long
 
 import matching
 
-params = matching.get_params()
+params = matching.get_params(parameter_file=args.parameters.name if args.parameters else None, 
+                             layer1=args.layer1.name,
+                             layer2=args.layer2.name,
+                             crs=args.crs if args.crs else None,
+                             attributes=args.attributes if args.attributes else None,
+                             output_prefix=args.output_prefix if args.output_prefix else None
+                             )
 
 # print_memory()
 print(str(datetime.datetime.now())+" - getdata")
-layer1name, path, db1, crs = matching.get_data_and_preprocess(params, "layer1")
-layer2name, path_, db2, crs_ = matching.get_data_and_preprocess(params, "layer2")
+_, path, db1, crs = matching.get_data_and_preprocess(params, "layer1")
+_, path_, db2, crs_ = matching.get_data_and_preprocess(params, "layer2")
 # layer1name, layer2name, path, db1, db2, crs = matching.get_data(params)
 
 # print(str(datetime.datetime.now())+" - preprocess")
@@ -53,15 +71,15 @@ AppariementSurfaces.LOGGER.setLevel(Level.DEBUG)
 liensPoly = AppariementSurfaces.appariementSurfaces(db1, db2, params['algo_params'])
 print(str(datetime.datetime.now())+" - matching done")
 # print_memory()
-links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, layer1name, layer2name, params['id_index'])
+links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, params['id_index'])
 print(str(datetime.datetime.now())+" - post_process_links done")
 # print_memory()
 
-matching.export_links(links, layer1name, layer2name, path, params)
+matching.export_links(links, path, params)
 print(str(datetime.datetime.now())+" - export_links done")
 # print_memory()
 
-matching.export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, layer1name, layer2name, path, params)
+matching.export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params)
 print(str(datetime.datetime.now())+" - export done")
 # print_memory()
 
