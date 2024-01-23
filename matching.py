@@ -194,7 +194,7 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
             features_stable.append(f.getObjetsComp()[0])
             all_link_sources.add(f.getObjetsRef()[0].getAttribute(id_index))
             all_link_targets.add(f.getObjetsComp()[0].getAttribute(id_index))
-            # HACK
+            # HACK - by JP: to get attributes for m-n links, use this internal Geoxygene structure to store objects
             f.getObjetsComp()[0].clearCorrespondants()
             f.getObjetsComp()[0].addCorrespondant(f.getObjetsComp()[0])
 
@@ -229,6 +229,7 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
             #    print("Comp : ")
             #    print([ref.getAttribute(1) for ref in f.getObjetsComp()])
             for comp in f.getObjetsComp():
+                # ! use features_merged but not features_aggregated (kept for reversibility)
                 features_merged.append(comp)
                 all_link_targets.add(comp.getAttribute(id_index))
                 # HACK
@@ -324,13 +325,13 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
                     attribute_values.append(x.getCorrespondant(c).getAttribute(a))
                 attributes[a+"_1"].append(to_str(attribute_values))
                 attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_aggregated:
-            for a in params["attributes"]:
-                attribute_values = []
-                for c in range(0,x.getCorrespondants().size()):
-                    attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-                attributes[a+"_1"].append(to_str(attribute_values))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        #for x in features_aggregated:
+        #    for a in params["attributes"]:
+        #        attribute_values = []
+        #        for c in range(0,x.getCorrespondants().size()):
+        #            attribute_values.append(x.getCorrespondant(c).getAttribute(a))
+        #        attributes[a+"_1"].append(to_str(attribute_values))
+        #        attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
 
     evol_polys = []
     for x in evol_layer:
