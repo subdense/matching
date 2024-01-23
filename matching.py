@@ -229,7 +229,7 @@ def post_process_links(lienspoly, db1, db2, crs, layer1name, layer2name, id_inde
             #    print("Comp : ")
             #    print([ref.getAttribute(1) for ref in f.getObjetsComp()])
             for comp in f.getObjetsComp():
-                features_aggregated.append(comp)
+                features_merged.append(comp)
                 all_link_targets.add(comp.getAttribute(id_index))
                 # HACK
                 comp.clearCorrespondants()
