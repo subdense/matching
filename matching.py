@@ -300,36 +300,37 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
         return ",".join(map(str, list))
 
     #TODO clean than up
-    for x in features_appeared:
-        for a in params["attributes"]:
-            attributes[a+"_1"].append(to_str([]))
-            attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-    for x in features_disappeared:
-        for a in params["attributes"]:
-            attributes[a+"_1"].append(to_str([x.getAttribute(a)]))
-            attributes[a+"_2"].append(to_str([]))
-    for x in features_stable:
-        for a in params["attributes"]:
-            attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
-            attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-    for x in features_split:
-        for a in params["attributes"]:
-            attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
-            attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-    for x in features_merged:
-        for a in params["attributes"]:
-            attribute_values = []
-            for c in range(0,x.getCorrespondants().size()):
-                attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-            attributes[a+"_1"].append(to_str(attribute_values))
-            attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-    for x in features_aggregated:
-        for a in params["attributes"]:
-            attribute_values = []
-            for c in range(0,x.getCorrespondants().size()):
-                attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-            attributes[a+"_1"].append(to_str(attribute_values))
-            attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+    if "attributes" in params:
+        for x in features_appeared:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([]))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_disappeared:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([x.getAttribute(a)]))
+                attributes[a+"_2"].append(to_str([]))
+        for x in features_stable:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_split:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_merged:
+            for a in params["attributes"]:
+                attribute_values = []
+                for c in range(0,x.getCorrespondants().size()):
+                    attribute_values.append(x.getCorrespondant(c).getAttribute(a))
+                attributes[a+"_1"].append(to_str(attribute_values))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_aggregated:
+            for a in params["attributes"]:
+                attribute_values = []
+                for c in range(0,x.getCorrespondants().size()):
+                    attribute_values.append(x.getCorrespondant(c).getAttribute(a))
+                attributes[a+"_1"].append(to_str(attribute_values))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
 
     evol_polys = []
     for x in evol_layer:
