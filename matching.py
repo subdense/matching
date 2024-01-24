@@ -174,46 +174,41 @@ def post_process_links(lienspoly, db1, db2, crs, id_index):
     all_link_sources = set()
 
     for f in tqdm(lienspoly,desc=f"{str(datetime.now())} - Post-processing links", position=0):
-        #print(f.getSchema().getColonnes()) # why do the matching links have no attributes - at least IDs should be kept
-        #print(f.getNom()) # empty
-        # FIXME getSchema.getColonnes() does not work: not initialised at shapefile reading? -> no attr names; here index hardcoded
-        #for ref in f.getObjetsRef():
-        #    print(ref.getAttributes()[id_index].toString())
-        #print('--')
-        #for comp in f.getObjetsComp():
-        #    print(comp.getAttributes()[id_index].toString())
-        #print('')
-
         # 1--1 : stability
         if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
-            features_stable.append(f.getObjetsComp()[0])
-            all_link_sources.add(f.getObjetsRef()[0].getAttribute(id_index))
-            all_link_targets.add(f.getObjetsComp()[0].getAttribute(id_index))
+            ref = f.getObjetsRef()[0]
+            comp = f.getObjetsComp()[0]
+            features_stable.append(comp)
+            all_link_sources.add(ref.getAttribute(id_index))
+            all_link_targets.add(comp.getAttribute(id_index))
             # HACK - by JP: to get attributes for m-n links, use this internal Geoxygene structure to store objects
-            f.getObjetsComp()[0].clearCorrespondants()
-            f.getObjetsComp()[0].addCorrespondant(f.getObjetsComp()[0])
+            comp.clearCorrespondants()
+            comp.addCorrespondant(ref)
 
         # 1 -- n : split
         if len(f.getObjetsRef())==1 and len(f.getObjetsComp())>1:
+            ref = f.getObjetsRef()[0]
             for comp in f.getObjetsComp():
                 features_split.append(comp)
-                all_link_sources.add(f.getObjetsRef()[0].getAttribute(id_index))
+                all_link_sources.add(ref.getAttribute(id_index))
                 all_link_targets.add(comp.getAttribute(id_index))
                 # HACK
                 comp.clearCorrespondants()
-                comp.addCorrespondant(f.getObjetsRef()[0])
+                comp.addCorrespondant(ref)
 
         # m -- 1 : merged
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())==1:
+            comp = f.getObjetsComp()[0]
             for ref in f.getObjetsRef():
                 #features_merged.append(ref)
                 all_link_sources.add(ref.getAttribute(id_index))
             # for consistency with "merge ~ aggregation", target feature of the link only exported as evolution
-            features_merged.append(f.getObjetsComp()[0])
-            all_link_targets.add(f.getObjetsComp()[0].getAttribute(id_index))
+            features_merged.append(comp)
+            all_link_targets.add(comp.getAttribute(id_index))
             # HACK
-            f.getObjetsComp()[0].clearCorrespondants()
-            f.getObjetsComp()[0].addCorrespondant(f.getObjetsComp()[0])
+            comp.clearCorrespondants()
+            for ref in f.getObjetsRef():
+                comp.addCorrespondant(ref)
 
         # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:

@@ -90,8 +90,9 @@ for component in tqdm(comp, desc=f"{str(datetime.datetime.now())} - Processing c
     newdb2 = matching.preprocess_layer("layer2", c_db2, attributes)
     db1.extend(newdb1)
     db2.extend(newdb2)
-    c_links = AppariementSurfaces.appariementSurfaces(newdb1, newdb2, params['algo_params'])
-    liensPoly.extend(c_links)
+    if (not newdb1.isEmpty() and not newdb2.isEmpty()):
+        c_links = AppariementSurfaces.appariementSurfaces(newdb1, newdb2, params['algo_params'])
+        liensPoly.extend(c_links)
 path = [".","output_data"]
 crs = CRS.from_user_input(params["crs"])
 
