@@ -1,3 +1,5 @@
 jpype1
 shapely
 geopandas
+tqdm
+networkx

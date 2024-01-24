@@ -5,18 +5,17 @@ from jpype.types import *
 import json
 
 import jpype
+from tqdm import tqdm
 
 from fr.ign.cogit.geoxygene.contrib.appariement.surfaces import ParametresAppSurfaces, AppariementSurfaces
-from fr.ign.cogit.geoxygene.util.conversion import ShapefileReader
 from fr.ign.cogit.geoxygene.feature import SchemaDefaultFeature, DefaultFeature, Population
 from fr.ign.cogit.geoxygene.api.spatial.coordgeom import IPolygon
 from fr.ign.cogit.geoxygene.schema.schemaConceptuelISOJeu import FeatureType, AttributeType
 from java.util import HashMap
-from fr.ign.cogit.geoxygene.util.index import Tiling, STRtreeJts
+from fr.ign.cogit.geoxygene.util.index import STRtreeJts
 from fr.ign.cogit.geoxygene.util.conversion import WktGeOxygene
 
 import sys,os
-from os.path import exists
 
 from shapely import from_wkt, Polygon
 from shapely.ops import transform
@@ -25,7 +24,6 @@ import pyproj
 from pyproj import CRS, Transformer
 import numpy
 from datetime import datetime
-from progress.bar import Bar
 
 def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, attributes = None, output_prefix = None):
     params = dict()
@@ -55,10 +53,6 @@ def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, 
     # param: index of IDs (same for both layers)
     id_index = 0
 
-    # test data by default: committed in data/bati
-    layer1 = "./data/bati/neudorf_2012.shp"
-    layer2 = "./data/bati/neudorf_2022.shp"
-
     params['algo_params']=param
     params['id_index']=id_index
     params['layer1']=layer1
@@ -81,22 +75,27 @@ def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, 
     if output_prefix:
         params['output_prefix'] = output_prefix
 
+        # test data by default: committed in data/bati
+    if not layer1:
+        layer1 = "./data/bati/neudorf_2012.shp"
+    if not layer2:
+        layer2 = "./data/bati/neudorf_2022.shp"
+
     return(params)
 
 #' FIXME handle reprojections
 #' FIXME paths must be the same
 
-def get_data_and_preprocess(params, layername):
+def get_data(params, layername):
     layer = params[layername]
-    path = [".","output_data"]
     attributes = []
     if "attributes" in params:
         attributes = params["attributes"]
-    print(str(datetime.now())+ " - READ " + layer)
+    print(f"{str(datetime.now())} - reading " + layer)
     db = geopandas.read_file(layer, engine="pyogrio", columns = attributes, fid_as_index=True)
-    print(db.head())
+    # print(db.head())
     if "crs" in params:
-        print(str(datetime.now())+ " - output CRS = " + str(params["crs"]))
+        # print(str(datetime.now())+ " - output CRS = " + str(params["crs"]))
         crs = CRS.from_user_input(params["crs"])
         if crs != db.crs:
             print(str(datetime.now())+" - reprojecting from CRS = " + str(db.crs))
@@ -105,11 +104,13 @@ def get_data_and_preprocess(params, layername):
         crs = db.crs
         params['crs'] = crs
         print(str(datetime.now())+" - output CRS from the first source = " + str(crs))
-    # get the list of feature attributes for db1
-    # print(str(datetime.datetime.now())+" - DB attributes = " + str(db.getFeatureType().getFeatureAttributes()))
+    return db, attributes
+
+def get_data_and_preprocess(params, layername):
+    db, attributes = get_data(params, layername)
     newdb = preprocess_layer(layername, db, attributes)
     print(str(datetime.now())+" - preprocess done")
-    return (layername, path, newdb, crs)
+    return newdb
 
 def preprocess_layer(layername, layer, attributes):
     newFeatureType = FeatureType()
@@ -129,8 +130,7 @@ def preprocess_layer(layername, layer, attributes):
     schema.setAttLookup(attLookup)
     newdb = Population(False, layername, DefaultFeature.class_, True)
     newdb.setFeatureType(newFeatureType)
-    bar = Bar('Processing', max=len(layer))
-    for index, feature in layer.iterrows():
+    for index, feature in tqdm(layer.iterrows(),desc=f"{str(datetime.now())} - Pre-processing layer {layername}", position=1, leave=False):
         def addFeature(poly, attribute_values):
             n = newdb.nouvelElement(WktGeOxygene.makeGeOxygene(poly.wkt))
             n.setSchema(schema)
@@ -150,11 +150,9 @@ def preprocess_layer(layername, layer, attributes):
                     addFeature(polygons[i],currentid)
         else:
             addFeature(geom,feature_attributes)
-        bar.next()
-    bar.finish()
     index = STRtreeJts(newdb)
     newdb.setSpatialIndexToExisting(index)
-    print(str(datetime.now())+" - initSpatialIndex done with " + str(newdb.size()))
+    # print(str(datetime.now())+" - initSpatialIndex done with " + str(newdb.size()))
     return newdb
 
 #'
@@ -175,7 +173,7 @@ def post_process_links(lienspoly, db1, db2, crs, id_index):
     all_link_targets = set()
     all_link_sources = set()
 
-    for f in lienspoly:
+    for f in tqdm(lienspoly,desc=f"{str(datetime.now())} - Post-processing links", position=0):
         #print(f.getSchema().getColonnes()) # why do the matching links have no attributes - at least IDs should be kept
         #print(f.getNom()) # empty
         # FIXME getSchema.getColonnes() does not work: not initialised at shapefile reading? -> no attr names; here index hardcoded
@@ -269,7 +267,7 @@ def post_process_links(lienspoly, db1, db2, crs, id_index):
             # HACK
             f2.clearCorrespondants()
 
-    print(str(datetime.now())+" - " + str(len(links)) + " processed")
+    # print(str(datetime.now())+" - " + str(len(links)) + " processed")
     return(links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared)
 
 
@@ -293,7 +291,7 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
         for a in params["attributes"]:
             attributes[a+"_1"] = []
             attributes[a+"_2"] = []
-    print("exporting attributes " + str(attributes.keys()))
+    # print("exporting attributes " + str(attributes.keys()))
     def to_str(list):
         return ",".join(map(str, list))
 
@@ -331,7 +329,7 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
         #        attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
 
     evol_polys = []
-    for x in evol_layer:
+    for x in tqdm(evol_layer,desc=f"{str(datetime.now())} - Exporting features",position=0):
         coordinates = []
         # TODO handle holes and not just the shell (exterior)
         for p in x.getGeom().getExterior().coord().getList():
