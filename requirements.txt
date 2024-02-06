@@ -3,3 +3,4 @@ shapely
 geopandas
 tqdm
 networkx
+pyogrio
