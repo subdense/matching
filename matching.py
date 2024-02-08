@@ -179,6 +179,7 @@ def match(idb1, idb2, attributes, params):
     link_geoms = list()
     link_source_ids = list()
     link_target_ids = list()
+    link_evaluation = list()
     for component in tqdm(comp, desc=f"{str(datetime.now())} - Processing connected components", position=0):
         db1_index = []
         db2_index = []
@@ -198,7 +199,7 @@ def match(idb1, idb2, attributes, params):
             # links.extend(c_links)
         else:
             c_links = []
-        c_feature_ids, c_feature_geoms, c_feature_evolution_types, c_feature_attributes, c_link_geoms, c_link_source_ids, c_link_target_ids = process_links(c_links, c_db1, c_db2, attributes)
+        c_feature_ids, c_feature_geoms, c_feature_evolution_types, c_feature_attributes, c_link_geoms, c_link_source_ids, c_link_target_ids, c_link_eval = process_links(c_links, c_db1, c_db2, attributes)
         feature_ids.extend(c_feature_ids)
         feature_geoms.extend(c_feature_geoms)
         feature_evolution_types.extend(c_feature_evolution_types)
@@ -208,7 +209,8 @@ def match(idb1, idb2, attributes, params):
         link_geoms.extend(c_link_geoms)
         link_source_ids.extend(c_link_source_ids)
         link_target_ids.extend(c_link_target_ids)
-    links = geopandas.GeoDataFrame({'geometry':link_geoms, 'source_id': link_source_ids, 'target_ids':link_target_ids}, crs = params["crs"])
+        link_evaluation.extend(c_link_eval)
+    links = geopandas.GeoDataFrame({'geometry':link_geoms, 'source_id': link_source_ids, 'target_ids':link_target_ids, 'evaluation': link_evaluation}, crs = params["crs"])
     evol = geopandas.GeoDataFrame({'id':feature_ids, 'type':feature_evolution_types, 'geometry':feature_geoms}, crs = params["crs"])
     for a, v in feature_attributes.items(): evol[a] = v
     return evol, links
@@ -248,6 +250,7 @@ def process_links(input_links, db1, db2, attributes):
     link_geoms = list()
     link_source_ids = list()
     link_target_ids = list()
+    link_evaluation = list()
     for f in input_links:
         # 1--1 : stability
         if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
@@ -313,6 +316,7 @@ def process_links(input_links, db1, db2, attributes):
             lien = jpype.JObject(arc.getCorrespondant(0), 'fr.ign.cogit.geoxygene.contrib.appariement.Lien')
             link_source_ids.append(str(lien.getObjetsRef()[0].getAttribute(0)))
             link_target_ids.append(str(lien.getObjetsComp()[0].getAttribute(0)))
+            link_evaluation.append(lien.getEvaluation())
     for f1 in db1:
         if f1.getAttribute(0) not in all_link_sources:
             feature_ids.append(f1.getAttribute(0))
@@ -329,7 +333,7 @@ def process_links(input_links, db1, db2, attributes):
             for a in attributes:
                 feature_attributes[a+"_1"].append(to_str([]))
                 feature_attributes[a+"_2"].append(to_str([f2.getAttribute(a)]))
-    return map(str, feature_ids), feature_geoms, feature_evolution_types, feature_attributes, link_geoms, link_source_ids, link_target_ids
+    return map(str, feature_ids), feature_geoms, feature_evolution_types, feature_attributes, link_geoms, link_source_ids, link_target_ids, link_evaluation
 
 
 #' FIXME find a way to specify a generic interpretation of matching links
