@@ -42,7 +42,7 @@ from java.lang import Runtime, Long
 
 import matching
 
-params = matching.get_params(parameter_file=args.parameters.name if args.parameters else None, 
+params = matching.get_params(parameter_file=args.parameters.name if args.parameters else None,
                              layer1=args.layer1.name,
                              layer2=args.layer2.name,
                              crs=args.crs if args.crs else None,
@@ -53,12 +53,12 @@ params = matching.get_params(parameter_file=args.parameters.name if args.paramet
 print(str(datetime.datetime.now())+" - reading the input data")
 idb1,attributes = matching.get_data(params, "layer1")
 idb2,_ = matching.get_data(params, "layer2")
-path = [".","output_data"]
-crs = CRS.from_user_input(params["crs"])
 
 evol, links = matching.match(idb1,idb2,attributes,params)
 
 # links, features_stable, features_split, features_merged, features_aggregated, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, params['id_index'])
+
+path = [".","output_data"]
 
 matching.export_links(links, path, params)
 

@@ -24,6 +24,114 @@ import pyproj
 from pyproj import CRS, Transformer
 import numpy
 from datetime import datetime
+import networkx as nx
+
+def match(idb1,idb2,attributes,params):
+    print(str(datetime.now())+" - joining the data (sjoin)")
+    join = geopandas.sjoin(idb1,idb2)
+    join["index_left"] = join.index.map('L_{}'.format)
+    join["index_right"] = join["index_right"].map('R_{}'.format)
+    print(f"{str(datetime.now())} - computing the connected components with {len(idb1)} features on the left and {len(idb2)} features on the right")
+    G = nx.Graph()
+    G.add_nodes_from(idb1.index.map('L_{}'.format))
+    G.add_nodes_from(idb2.index.map('R_{}'.format))
+    G.add_edges_from(list(map(tuple, join[["index_left","index_right"]].to_numpy())))
+    comp = list(nx.connected_components(G))
+    print(f"{str(datetime.now())} - found {len(comp)} connected components")
+    db1 = []
+    db2 = []
+    liensPoly = []
+    for component in tqdm(comp, desc=f"{str(datetime.now())} - Processing connected components", position=0):
+        db1_index = []
+        db2_index = []
+        for n in component:
+            if n.startswith("L_"):
+                db1_index.append(int(n[2:]))
+            else:
+                db2_index.append(int(n[2:]))
+        # print("L = "+",".join(map(str,db1_index)))
+        c_db1 = idb1.loc[db1_index]
+        # print("R = "+",".join(map(str,db2_index)))
+        c_db2 = idb2.loc[db2_index]
+        newdb1 = preprocess_layer("layer1", c_db1, attributes)
+        newdb2 = preprocess_layer("layer2", c_db2, attributes)
+        db1.extend(newdb1)
+        db2.extend(newdb2)
+        if (not newdb1.isEmpty() and not newdb2.isEmpty()):
+            c_links = AppariementSurfaces.appariementSurfaces(newdb1, newdb2, params['algo_params'])
+            liensPoly.extend(c_links)
+
+    crs = CRS.from_user_input(params["crs"])
+    links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared = post_process_links(liensPoly, db1, db2, crs, params['id_index'])
+
+    evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
+    evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.repeat('disappeared',len(features_disappeared)))+list(numpy.repeat('stable',len(features_stable)))+list(numpy.repeat('split',len(features_split)))+list(numpy.repeat('merged',len(features_merged)))+list(numpy.repeat('aggregated',len(features_aggregated)))
+
+    attributes = dict()
+    if "attributes" in params:
+        for a in params["attributes"]:
+            attributes[a+"_1"] = []
+            attributes[a+"_2"] = []
+    # print("exporting attributes " + str(attributes.keys()))
+    def to_str(list):
+        return ",".join(map(str, list))
+
+    #TODO clean than up
+    if "attributes" in params:
+        for x in features_appeared:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([]))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_disappeared:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([x.getAttribute(a)]))
+                attributes[a+"_2"].append(to_str([]))
+        for x in features_stable:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_split:
+            for a in params["attributes"]:
+                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        for x in features_merged:
+            for a in params["attributes"]:
+                attribute_values = []
+                for c in range(0,x.getCorrespondants().size()):
+                    attribute_values.append(x.getCorrespondant(c).getAttribute(a))
+                attributes[a+"_1"].append(to_str(attribute_values))
+                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+        #for x in features_aggregated:
+        #    for a in params["attributes"]:
+        #        attribute_values = []
+        #        for c in range(0,x.getCorrespondants().size()):
+        #            attribute_values.append(x.getCorrespondant(c).getAttribute(a))
+        #        attributes[a+"_1"].append(to_str(attribute_values))
+        #        attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
+
+    evol_polys = []
+    for x in tqdm(evol_layer,desc=f"{str(datetime.now())} - Exporting features",position=0):
+        coordinates = []
+        # TODO handle holes and not just the shell (exterior)
+        for p in x.getGeom().getExterior().coord().getList():
+            coordinates.append((p.getX(), p.getY()))
+        holes = []
+        for h in range(0,x.getGeom().sizeInterior()):
+            ring = x.getGeom().getInterior(h)
+            coords = []
+            for p in ring.coord().getList():
+                coords.append((p.getX(), p.getY()))
+            holes.append(coords)
+        polygon = Polygon(coordinates,holes)
+        evol_polys.append(polygon)
+
+    evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
+
+    evol = geopandas.GeoDataFrame({'id':evol_ids, 'type':evol_attrs, 'geometry':evol_polys}, crs = crs)
+    for a, v in attributes.items():
+        evol[a] = v
+
+    return (evol, links)
 
 def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, attributes = None, output_prefix = None):
     params = dict()
@@ -275,79 +383,11 @@ def export_links(links, path, params):
     # links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
     links.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='links', driver="GPKG")
 
-def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params):
-    # export
-
-    evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
-    evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.repeat('disappeared',len(features_disappeared)))+list(numpy.repeat('stable',len(features_stable)))+list(numpy.repeat('split',len(features_split)))+list(numpy.repeat('merged',len(features_merged)))+list(numpy.repeat('aggregated',len(features_aggregated)))
-
-    attributes = dict()
-    if "attributes" in params:
-        for a in params["attributes"]:
-            attributes[a+"_1"] = []
-            attributes[a+"_2"] = []
-    # print("exporting attributes " + str(attributes.keys()))
-    def to_str(list):
-        return ",".join(map(str, list))
-
-    #TODO clean than up
-    if "attributes" in params:
-        for x in features_appeared:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([]))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_disappeared:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([x.getAttribute(a)]))
-                attributes[a+"_2"].append(to_str([]))
-        for x in features_stable:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_split:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_merged:
-            for a in params["attributes"]:
-                attribute_values = []
-                for c in range(0,x.getCorrespondants().size()):
-                    attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-                attributes[a+"_1"].append(to_str(attribute_values))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        #for x in features_aggregated:
-        #    for a in params["attributes"]:
-        #        attribute_values = []
-        #        for c in range(0,x.getCorrespondants().size()):
-        #            attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-        #        attributes[a+"_1"].append(to_str(attribute_values))
-        #        attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-
-    evol_polys = []
-    for x in tqdm(evol_layer,desc=f"{str(datetime.now())} - Exporting features",position=0):
-        coordinates = []
-        # TODO handle holes and not just the shell (exterior)
-        for p in x.getGeom().getExterior().coord().getList():
-            coordinates.append((p.getX(), p.getY()))
-        holes = []
-        for h in range(0,x.getGeom().sizeInterior()):
-            ring = x.getGeom().getInterior(h)
-            coords = []
-            for p in ring.coord().getList():
-                coords.append((p.getX(), p.getY()))
-            holes.append(coords)
-        polygon = Polygon(coordinates,holes)
-        evol_polys.append(polygon)
-
-    evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
-
-    evol = geopandas.GeoDataFrame({'id':evol_ids, 'type':evol_attrs, 'geometry':evol_polys}, crs = crs)
-    for a, v in attributes.items():
-        evol[a] = v
-
-    prefix = params["output_prefix"]
-    # evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.shp')
-    evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.gpkg', layer='evolution', driver="GPKG")
+#def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params):
+#    # export
+#    prefix = params["output_prefix"]
+#    # evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.shp')
+#    evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.gpkg', layer='evolution', driver="GPKG")
 
 
 def geojson_export(links, path, params):
