@@ -17,7 +17,7 @@ from fr.ign.cogit.geoxygene.util.conversion import WktGeOxygene
 
 import sys,os
 
-from shapely import from_wkt, Polygon
+from shapely import from_wkt, Polygon, LineString
 from shapely.ops import transform
 import geopandas
 import pyproj
@@ -89,8 +89,7 @@ def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, 
 def get_data(params, layername):
     layer = params[layername]
     attributes = []
-    if "attributes" in params:
-        attributes = params["attributes"]
+    if "attributes" in params: attributes = params["attributes"]
     print(f"{str(datetime.now())} - reading " + layer)
     db = geopandas.read_file(layer, engine="pyogrio", columns = attributes, fid_as_index=True)
     # print(db.head())
@@ -130,32 +129,209 @@ def preprocess_layer(layername, layer, attributes):
     schema.setAttLookup(attLookup)
     newdb = Population(False, layername, DefaultFeature.class_, True)
     newdb.setFeatureType(newFeatureType)
-    for index, feature in tqdm(layer.iterrows(),desc=f"{str(datetime.now())} - Pre-processing layer {layername}", position=1, leave=False):
-        def addFeature(poly, attribute_values):
+    for index, feature in layer.iterrows():
+        def addFeature(poly, feature, index):
             n = newdb.nouvelElement(WktGeOxygene.makeGeOxygene(poly.wkt))
             n.setSchema(schema)
-            attributes = jpype.JObject[:]@[*attribute_values]
-            n.setAttributes(attributes)
+            feature_attributes = [index]
+            for a in attributes:
+                feature_attributes.append(feature[a])
+            new_attributes = jpype.JObject[:]@[*feature_attributes]
+            n.setAttributes(new_attributes)
         geom = feature["geometry"]
-        feature_attributes = [index]
-        for a in attributes:
-            feature_attributes.append(feature[a])
         if geom.geom_type == 'MultiPolygon':
             polygons = list(geom.geoms)
             if len(polygons) == 1:
-                addFeature(polygons[0],feature_attributes)
+                addFeature(polygons[0],feature,index)
             else:
                 for i in range(0,len(polygons)):
                     currentid = str(index)+"-"+str(i)#layername+"-"+
-                    addFeature(polygons[i],currentid)
+                    addFeature(polygons[i],feature,currentid)
         else:
-            addFeature(geom,feature_attributes)
+            addFeature(geom,feature,index)
     index = STRtreeJts(newdb)
     newdb.setSpatialIndexToExisting(index)
     # print(str(datetime.now())+" - initSpatialIndex done with " + str(newdb.size()))
     return newdb
 
-#'
+def match(idb1, idb2, attributes, params):
+    def connected_components(idb1,idb2):
+        print(str(datetime.now())+" - joining the data (sjoin)")
+        join = geopandas.sjoin(idb1,idb2)
+        join["index_left"] = join.index.map('L_{}'.format)
+        join["index_right"] = join["index_right"].map('R_{}'.format)
+        print(f"{str(datetime.now())} - computing the connected components with {len(idb1)} features on the left and {len(idb2)} features on the right")
+        import networkx as nx
+        G = nx.Graph()
+        G.add_nodes_from(idb1.index.map('L_{}'.format))
+        G.add_nodes_from(idb2.index.map('R_{}'.format))
+        G.add_edges_from(list(map(tuple, join[["index_left","index_right"]].to_numpy())))
+        return list(sorted(nx.connected_components(G), reverse=True))
+    comp = connected_components(idb1, idb2)
+    print(f"{str(datetime.now())} - found {len(comp)} connected components")
+    feature_ids = list()
+    feature_geoms = list()
+    feature_evolution_types = list()
+    feature_attributes = dict()
+    for a in attributes:
+        feature_attributes[a+"_1"] = []
+        feature_attributes[a+"_2"] = []
+    link_geoms = list()
+    link_source_ids = list()
+    link_target_ids = list()
+    for component in tqdm(comp, desc=f"{str(datetime.now())} - Processing connected components", position=0):
+        db1_index = []
+        db2_index = []
+        for n in component:
+            if n.startswith("L_"): db1_index.append(int(n[2:]))
+            else: db2_index.append(int(n[2:]))
+        # select corresponding input features
+        c_db1 = preprocess_layer("layer1", idb1.loc[db1_index], attributes)
+        # add them to the output data
+        # db1.extend(c_db1)
+        # select corresponding input features
+        c_db2 = preprocess_layer("layer2", idb2.loc[db2_index], attributes)
+        # add them to the output data
+        # db2.extend(c_db2)
+        if (not c_db1.isEmpty() and not c_db2.isEmpty()):
+            c_links = AppariementSurfaces.appariementSurfaces(c_db1, c_db2, params["algo_params"])
+            # links.extend(c_links)
+        else:
+            c_links = []
+        c_feature_ids, c_feature_geoms, c_feature_evolution_types, c_feature_attributes, c_link_geoms, c_link_source_ids, c_link_target_ids = process_links(c_links, c_db1, c_db2, attributes)
+        feature_ids.extend(c_feature_ids)
+        feature_geoms.extend(c_feature_geoms)
+        feature_evolution_types.extend(c_feature_evolution_types)
+        for a in attributes: 
+            feature_attributes[a+"_1"].extend(c_feature_attributes[a+"_1"])
+            feature_attributes[a+"_2"].extend(c_feature_attributes[a+"_2"])
+        link_geoms.extend(c_link_geoms)
+        link_source_ids.extend(c_link_source_ids)
+        link_target_ids.extend(c_link_target_ids)
+    links = geopandas.GeoDataFrame({'geometry':link_geoms, 'source_id': link_source_ids, 'target_ids':link_target_ids}, crs = params["crs"])
+    evol = geopandas.GeoDataFrame({'id':feature_ids, 'type':feature_evolution_types, 'geometry':feature_geoms}, crs = params["crs"])
+    for a, v in feature_attributes.items(): evol[a] = v
+    return evol, links
+
+def make_polygon(geom):
+    coordinates = []
+    for p in geom.getExterior().coord().getList():
+        coordinates.append((p.getX(), p.getY()))
+    holes = []
+    for h in range(0,geom.sizeInterior()):
+        ring = geom.getInterior(h)
+        coords = []
+        for p in ring.coord().getList():
+            coords.append((p.getX(), p.getY()))
+        holes.append(coords)
+    return Polygon(coordinates,holes)
+def make_linestring(geom):
+    coordinates = []
+    for p in geom.coord().getList():
+        coordinates.append((p.getX(), p.getY()))
+    return LineString(coordinates)
+def to_str(list):
+    return ",".join(map(str, list))
+
+def process_links(input_links, db1, db2, attributes):
+    # features
+    feature_ids = list()
+    feature_geoms = list()
+    feature_evolution_types = list()
+    feature_attributes = dict()
+    for a in attributes:
+        feature_attributes[a+"_1"] = []
+        feature_attributes[a+"_2"] = []
+    # links
+    all_link_sources = set()
+    all_link_targets = set()
+    link_geoms = list()
+    link_source_ids = list()
+    link_target_ids = list()
+    for f in input_links:
+        # 1--1 : stability
+        if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
+            ref = f.getObjetsRef()[0]
+            comp = f.getObjetsComp()[0]
+            feature_ids.append(comp.getAttribute(0))
+            feature_geoms.append(make_polygon(comp.getGeom()))
+            feature_evolution_types.append("stable")
+            for a in attributes:
+                feature_attributes[a+"_1"].append(to_str([ref.getAttribute(a)]))
+                feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
+            all_link_sources.add(ref.getAttribute(0))
+            all_link_targets.add(comp.getAttribute(0))
+        # 1 -- n : split
+        if len(f.getObjetsRef())==1 and len(f.getObjetsComp())>1:
+            ref = f.getObjetsRef()[0]
+            all_link_sources.add(ref.getAttribute(0))
+            for comp in f.getObjetsComp():
+                feature_ids.append(comp.getAttribute(0))
+                feature_geoms.append(make_polygon(comp.getGeom()))
+                feature_evolution_types.append("split")
+                for a in attributes:
+                    feature_attributes[a+"_1"].append(to_str([ref.getAttribute(a)]))
+                    feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
+                all_link_targets.add(comp.getAttribute(0))
+        # m -- 1 : merged
+        if len(f.getObjetsRef())>1 and len(f.getObjetsComp())==1:
+            comp = f.getObjetsComp()[0]
+            for ref in f.getObjetsRef():
+                all_link_sources.add(ref.getAttribute(0))
+            ref_attribute_dict = dict()
+            for a in attributes:
+                ref_attribute_dict[a] = [ref.getAttribute(a) for ref in f.getObjetsRef()]
+            # for consistency with "merge ~ aggregation", target feature of the link only exported as evolution
+            feature_ids.append(comp.getAttribute(0))
+            feature_geoms.append(make_polygon(comp.getGeom()))
+            feature_evolution_types.append("merged")
+            for a in attributes:
+                feature_attributes[a+"_1"].append(to_str(ref_attribute_dict[a]))
+                feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
+            all_link_targets.add(comp.getAttribute(0))
+        # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
+        if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
+            for ref in f.getObjetsRef():
+                all_link_sources.add(ref.getAttribute(0))
+            ref_attribute_dict = dict()
+            for a in attributes:
+                ref_attribute_dict[a] = [ref.getAttribute(a) for ref in f.getObjetsRef()]
+            for comp in f.getObjetsComp():
+                # ! use features_merged but not features_aggregated (kept for reversibility)
+                all_link_targets.add(comp.getAttribute(0))
+                feature_ids.append(comp.getAttribute(0))
+                feature_geoms.append(make_polygon(comp.getGeom()))
+                feature_evolution_types.append("merged")
+                for a in attributes:
+                    feature_attributes[a+"_1"].append(to_str(ref_attribute_dict[a]))
+                    feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
+        # iterate over single links in the multiline
+        for i in range(0,f.getGeom().size()):
+            link_geoms.append(make_linestring(f.getGeom().get(i)))
+        # links in the multiline have same index than arcs -> construct origin/destination id lists
+        for arc in f.getArcs():
+            lien = jpype.JObject(arc.getCorrespondant(0), 'fr.ign.cogit.geoxygene.contrib.appariement.Lien')
+            link_source_ids.append(str(lien.getObjetsRef()[0].getAttribute(0)))
+            link_target_ids.append(str(lien.getObjetsComp()[0].getAttribute(0)))
+    for f1 in db1:
+        if f1.getAttribute(0) not in all_link_sources:
+            feature_ids.append(f1.getAttribute(0))
+            feature_geoms.append(make_polygon(f1.getGeom()))
+            feature_evolution_types.append("disappeared")
+            for a in attributes:
+                feature_attributes[a+"_1"].append(to_str([f1.getAttribute(a)]))
+                feature_attributes[a+"_2"].append(to_str([]))
+    for f2 in db2:
+        if f2.getAttribute(0) not in all_link_targets:
+            feature_ids.append(f2.getAttribute(0))
+            feature_geoms.append(make_polygon(f2.getGeom()))
+            feature_evolution_types.append("appeared")
+            for a in attributes:
+                feature_attributes[a+"_1"].append(to_str([]))
+                feature_attributes[a+"_2"].append(to_str([f2.getAttribute(a)]))
+    return map(str, feature_ids), feature_geoms, feature_evolution_types, feature_attributes, link_geoms, link_source_ids, link_target_ids
+
+
 #' FIXME find a way to specify a generic interpretation of matching links
 #' FIXME add comparison geometries and semantic: ex height: important for densification
 def post_process_links(lienspoly, db1, db2, crs, id_index):
@@ -262,14 +438,12 @@ def post_process_links(lienspoly, db1, db2, crs, id_index):
             # HACK
             f2.clearCorrespondants()
 
-    # print(str(datetime.now())+" - " + str(len(links)) + " processed")
-    return(links, features_stable, features_split, features_merged, features_aggregated, all_link_targets, all_link_sources, features_disappeared, features_appeared)
+    return(links, features_stable, features_split, features_merged, features_aggregated, features_disappeared, features_appeared)
 
 
 def export_links(links, path, params):
     output_dir = '/'.join(path)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    if not os.path.exists(output_dir): os.makedirs(output_dir)
     geojson_export(links, path, params)
     # export links to shp
     # links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
@@ -287,9 +461,6 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
             attributes[a+"_1"] = []
             attributes[a+"_2"] = []
     # print("exporting attributes " + str(attributes.keys()))
-    def to_str(list):
-        return ",".join(map(str, list))
-
     #TODO clean than up
     if "attributes" in params:
         for x in features_appeared:
@@ -325,19 +496,7 @@ def export(features_appeared, features_disappeared, features_stable, features_sp
 
     evol_polys = []
     for x in tqdm(evol_layer,desc=f"{str(datetime.now())} - Exporting features",position=0):
-        coordinates = []
-        # TODO handle holes and not just the shell (exterior)
-        for p in x.getGeom().getExterior().coord().getList():
-            coordinates.append((p.getX(), p.getY()))
-        holes = []
-        for h in range(0,x.getGeom().sizeInterior()):
-            ring = x.getGeom().getInterior(h)
-            coords = []
-            for p in ring.coord().getList():
-                coords.append((p.getX(), p.getY()))
-            holes.append(coords)
-        polygon = Polygon(coordinates,holes)
-        evol_polys.append(polygon)
+        evol_polys.append(make_polygon(x.getGeom()))
 
     evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
 
