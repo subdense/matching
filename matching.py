@@ -210,7 +210,7 @@ def match(idb1, idb2, attributes, params):
         link_source_ids.extend(c_link_source_ids)
         link_target_ids.extend(c_link_target_ids)
         link_evaluation.extend(c_link_eval)
-    links = geopandas.GeoDataFrame({'geometry':link_geoms, 'source_id': link_source_ids, 'target_ids':link_target_ids, 'evaluation': link_evaluation}, crs = params["crs"])
+    links = geopandas.GeoDataFrame({'geometry':link_geoms, 'source_id': link_source_ids, 'target_id':link_target_ids, 'evaluation': link_evaluation}, crs = params["crs"])
     evol = geopandas.GeoDataFrame({'id':feature_ids, 'type':feature_evolution_types, 'geometry':feature_geoms}, crs = params["crs"])
     for a, v in feature_attributes.items(): evol[a] = v
     return evol, links
@@ -423,7 +423,7 @@ def post_process_links(lienspoly, db1, db2, crs, id_index):
             source_ids.append(str(lien.getObjetsRef()[0].getAttribute(id_index)))
             target_ids.append(str(lien.getObjetsComp()[0].getAttribute(id_index)))
 
-    links = geopandas.GeoDataFrame({'geometry':geoms, 'source_id': source_ids, 'target_ids':target_ids}, crs = crs)
+    links = geopandas.GeoDataFrame({'geometry':geoms, 'source_id': source_ids, 'target_id':target_ids}, crs = crs)
 
     # construct appeared/disappeared layer
     # 1 -- 0
@@ -445,13 +445,44 @@ def post_process_links(lienspoly, db1, db2, crs, id_index):
     return(links, features_stable, features_split, features_merged, features_aggregated, features_disappeared, features_appeared)
 
 
-def export_links(links, path, params):
+def export_links(layer1, layer2, links, path, params, arguments):
     output_dir = '/'.join(path)
     if not os.path.exists(output_dir): os.makedirs(output_dir)
     geojson_export(links, path, params)
     # export links to shp
     # links.to_file('/'.join(path)+'/MATCHING-LINKS_'+layer1name+"_"+layer2name+'.shp')
-    links.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='links', driver="GPKG")
+    # export links to GPKG
+    # WARNING: does not work yet https://github.com/geopandas/geopandas/pull/2850
+    algoparams = params['algo_params']
+    metadata = {
+        "title": "Matching links",
+        "description": "AppariementSurfaces (Atef Bel Hadj Ali)",
+        "created": str(datetime.now()),
+        "Software":"https://github.com/subdense/matching",
+        "linking":"https://hal.science/tel-03244834/document",
+        "Abstract":"AppariementSurfaces (Atef Bel Hadj Ali), implemented in https://github.com/IGNF/geoxygene/blob/master/geoxygene-contrib/src/main/java/fr/ign/cogit/geoxygene/contrib/appariement/surfaces/AppariementSurfaces.java",
+        "parameters": {
+            "surface_min_intersection": algoparams.surface_min_intersection,
+            "pourcentage_min_intersection": algoparams.pourcentage_min_intersection,
+            "pourcentage_intersection_sur": algoparams.pourcentage_intersection_sur,
+            "minimiseDistanceSurfacique": algoparams.minimiseDistanceSurfacique,
+            "distSurfMaxFinal": algoparams.distSurfMaxFinal,
+            "completudeExactitudeMinFinal": algoparams.completudeExactitudeMinFinal,
+            "regroupementOptimal": algoparams.regroupementOptimal,
+            "filtrageFinal": algoparams.filtrageFinal,
+            "ajoutPetitesSurfaces": algoparams.ajoutPetitesSurfaces,
+            "seuilPourcentageTaillePetitesSurfaces": algoparams.seuilPourcentageTaillePetitesSurfaces,
+            "persistant": algoparams.persistant,
+            "resolutionMin": algoparams.resolutionMin,
+            "resolutionMax": algoparams.resolutionMax
+        },
+        "Command line arguments": ' '.join(arguments)
+    }
+    links.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='links', driver="GPKG", metadata=metadata)
+    layer1.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='layer1', driver="GPKG")
+    layer2.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='layer2', driver="GPKG")
+    with open('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS_metadata.json', 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
 
 def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params):
     # export
