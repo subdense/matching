@@ -58,9 +58,14 @@ evol, links = matching.match(idb1,idb2,attributes,params)
 
 # links, features_stable, features_split, features_merged, features_aggregated, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, params['id_index'])
 
+<<<<<<< HEAD
 path = [".","output_data"]
 
 matching.export_links(links, path, params)
+=======
+import sys
+matching.export_links(idb1, idb2, links, path, params, sys.argv)
+>>>>>>> 2375e5ea67483728a79847594dd152953863d0b3
 
 # matching.export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params)
 prefix = params["output_prefix"]
