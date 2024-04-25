@@ -228,6 +228,7 @@ def process_links(input_links, db1, db2, attributes):
     feature_ids = list()
     feature_geoms = list()
     feature_evolution_types = list()
+    feature_link_ids = list()
     feature_attributes = dict()
     for a in attributes:
         feature_attributes[a+"_1"] = []
@@ -239,7 +240,9 @@ def process_links(input_links, db1, db2, attributes):
     link_source_ids = list()
     link_target_ids = list()
     link_evaluation = list()
+    link_ids = list()
     for f in input_links:
+        link_id = ""
         # 1--1 : stability
         if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
             ref = f.getObjetsRef()[0]
