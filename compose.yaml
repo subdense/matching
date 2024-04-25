@@ -11,6 +11,9 @@ services:
   matching:
     build:
       context: .
+      args:
+        HTTP_PROXY: ${HTTP_PROXY}
+        HTTPS_PROXY: ${HTTPS_PROXY}
     volumes:
       - type: bind
         source: ./data
