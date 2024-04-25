@@ -203,7 +203,7 @@ def match(idb1, idb2, attributes, params):
         feature_ids.extend(c_feature_ids)
         feature_geoms.extend(c_feature_geoms)
         feature_evolution_types.extend(c_feature_evolution_types)
-        for a in attributes: 
+        for a in attributes:
             feature_attributes[a+"_1"].extend(c_feature_attributes[a+"_1"])
             feature_attributes[a+"_2"].extend(c_feature_attributes[a+"_2"])
         link_geoms.extend(c_link_geoms)
@@ -293,6 +293,7 @@ def process_links(input_links, db1, db2, attributes):
                 feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
             all_link_targets.add(comp.getAttribute(0))
         # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
+        # 20240425: current data model available at https://github.com/subdense/dashboard/blob/master/Processes/ComputeBuildingEvolution/Schema.md -> recompose (former "aggregation") is now distinct from merged
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
             for ref in f.getObjetsRef():
                 all_link_sources.add(ref.getAttribute(0))
@@ -304,7 +305,7 @@ def process_links(input_links, db1, db2, attributes):
                 all_link_targets.add(comp.getAttribute(0))
                 feature_ids.append(comp.getAttribute(0))
                 feature_geoms.append(make_polygon(comp.getGeom()))
-                feature_evolution_types.append("merged")
+                feature_evolution_types.append("recomposed")
                 for a in attributes:
                     feature_attributes[a+"_1"].append(to_str(ref_attribute_dict[a]))
                     feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
