@@ -292,8 +292,10 @@ def process_links(input_links, db1, db2, attributes):
                 feature_attributes[a+"_1"].append(to_str(ref_attribute_dict[a]))
                 feature_attributes[a+"_2"].append(to_str([comp.getAttribute(a)]))
             all_link_targets.add(comp.getAttribute(0))
-        # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
-        # 20240425: current data model available at https://github.com/subdense/dashboard/blob/master/Processes/ComputeBuildingEvolution/Schema.md -> recompose (former "aggregation") is now distinct from merged
+        # m -- n
+        #   20231130: new data model -> merge == agregation ~~aggregation~~
+        #   20240425: current data model available at https://github.com/subdense/dashboard/blob/master/Processes/ComputeBuildingEvolution/Schema.md -> recompose (former "aggregation") is now distinct from merged
+        # for debug: neudorf: (2012 : BATIMENT0000000048824441 BATIMENT0000000048824481) -> (2022 : BATIMENT0000002223308372 BATIMENT0000002223308719 BATIMENT0000002223308720 BATIMENT0000002223308838)
         if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
             for ref in f.getObjetsRef():
                 all_link_sources.add(ref.getAttribute(0))
@@ -336,114 +338,6 @@ def process_links(input_links, db1, db2, attributes):
                 feature_attributes[a+"_2"].append(to_str([f2.getAttribute(a)]))
     return map(str, feature_ids), feature_geoms, feature_evolution_types, feature_attributes, link_geoms, link_source_ids, link_target_ids, link_evaluation
 
-
-#' FIXME find a way to specify a generic interpretation of matching links
-#' FIXME add comparison geometries and semantic: ex height: important for densification
-def post_process_links(lienspoly, db1, db2, crs, id_index):
-    # construct geopandas data frame
-    attrs = list()
-    geoms = list()
-    source_ids = list()
-    target_ids = list()
-
-    # to sort links by type
-    features_stable = list()
-    features_split = list()
-    features_merged = list()
-    features_aggregated = list()
-    all_link_targets = set()
-    all_link_sources = set()
-
-    for f in tqdm(lienspoly,desc=f"{str(datetime.now())} - Post-processing links", position=0):
-        # 1--1 : stability
-        if len(f.getObjetsRef())==1 and len(f.getObjetsComp())==1:
-            ref = f.getObjetsRef()[0]
-            comp = f.getObjetsComp()[0]
-            features_stable.append(comp)
-            all_link_sources.add(ref.getAttribute(id_index))
-            all_link_targets.add(comp.getAttribute(id_index))
-            # HACK - by JP: to get attributes for m-n links, use this internal Geoxygene structure to store objects
-            comp.clearCorrespondants()
-            comp.addCorrespondant(ref)
-
-        # 1 -- n : split
-        if len(f.getObjetsRef())==1 and len(f.getObjetsComp())>1:
-            ref = f.getObjetsRef()[0]
-            for comp in f.getObjetsComp():
-                features_split.append(comp)
-                all_link_sources.add(ref.getAttribute(id_index))
-                all_link_targets.add(comp.getAttribute(id_index))
-                # HACK
-                comp.clearCorrespondants()
-                comp.addCorrespondant(ref)
-
-        # m -- 1 : merged
-        if len(f.getObjetsRef())>1 and len(f.getObjetsComp())==1:
-            comp = f.getObjetsComp()[0]
-            for ref in f.getObjetsRef():
-                #features_merged.append(ref)
-                all_link_sources.add(ref.getAttribute(id_index))
-            # for consistency with "merge ~ aggregation", target feature of the link only exported as evolution
-            features_merged.append(comp)
-            all_link_targets.add(comp.getAttribute(id_index))
-            # HACK
-            comp.clearCorrespondants()
-            for ref in f.getObjetsRef():
-                comp.addCorrespondant(ref)
-
-        # m -- n : 20231130: new data model -> merge == agregation ~~aggregation~~
-        if len(f.getObjetsRef())>1 and len(f.getObjetsComp())>1:
-            # debug: neudorf: (2012 : BATIMENT0000000048824441 BATIMENT0000000048824481) -> (2022 : BATIMENT0000002223308372 BATIMENT0000002223308719 BATIMENT0000002223308720 BATIMENT0000002223308838)
-            #if 'BATIMENT0000000048824441' in (ref.getAttribute(1) for ref in f.getObjetsRef()):
-            #    print("Ref : ")
-            #    print([ref.getAttribute(1) for ref in f.getObjetsRef()])
-            #    print("Comp : ")
-            #    print([ref.getAttribute(1) for ref in f.getObjetsComp()])
-            for comp in f.getObjetsComp():
-                # ! use features_merged but not features_aggregated (kept for reversibility)
-                features_merged.append(comp)
-                all_link_targets.add(comp.getAttribute(id_index))
-                # HACK
-                comp.clearCorrespondants()
-                for ref in f.getObjetsRef():
-                    comp.addCorrespondant(ref)
-            for ref in f.getObjetsRef():
-                all_link_sources.add(ref.getAttribute(id_index))
-
-        # iterate over single links in the multiline
-        for i in range(0,f.getGeom().size()):
-            #if 'BATIMENT0000000048824441' in (ref.getAttribute(1) for ref in f.getObjetsRef()): # DEBUG
-            #    print(f.getGeom().get(i))
-            link = "LINESTRING ("+", ".join(list(map(lambda p: str(p.getX())+" "+str(p.getY()),f.getGeom().get(i).coord().getList())))+")"
-            geoms.append(from_wkt(link))
-            #attrs.append(list(f.getSchema().getColonnes())) # no attributes?
-
-        # links in the multiline have same index than arcs -> construct origin/destination id lists
-        for arc in f.getArcs():
-            lien = jpype.JObject(arc.getCorrespondant(0), 'fr.ign.cogit.geoxygene.contrib.appariement.Lien')
-            source_ids.append(str(lien.getObjetsRef()[0].getAttribute(id_index)))
-            target_ids.append(str(lien.getObjetsComp()[0].getAttribute(id_index)))
-
-    links = geopandas.GeoDataFrame({'geometry':geoms, 'source_id': source_ids, 'target_id':target_ids}, crs = crs)
-
-    # construct appeared/disappeared layer
-    # 1 -- 0
-    features_disappeared = list()
-    for f1 in db1:
-        if f1.getAttribute(id_index) not in all_link_sources:
-            #print(f1.getAttribute(0))
-            features_disappeared.append(f1)
-            # HACK
-            f1.clearCorrespondants()
-    # 0 -- 1
-    features_appeared = list()
-    for f2 in db2:
-        if f2.getAttribute(id_index) not in all_link_targets:
-            features_appeared.append(f2)
-            # HACK
-            f2.clearCorrespondants()
-
-    return(links, features_stable, features_split, features_merged, features_aggregated, features_disappeared, features_appeared)
 
 
 def export_links(layer1, layer2, links, path, params, arguments):
