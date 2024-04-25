@@ -72,9 +72,6 @@ def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, 
 
     return(params)
 
-#' FIXME handle reprojections
-#' FIXME paths must be the same
-
 def get_data(params, layername):
     layer = params[layername]
     attributes = []
@@ -216,11 +213,13 @@ def make_polygon(geom):
             coords.append((p.getX(), p.getY()))
         holes.append(coords)
     return Polygon(coordinates,holes)
+
 def make_linestring(geom):
     coordinates = []
     for p in geom.coord().getList():
         coordinates.append((p.getX(), p.getY()))
     return LineString(coordinates)
+
 def to_str(list):
     return ",".join(map(str, list))
 
@@ -327,8 +326,6 @@ def process_links(input_links, db1, db2, attributes):
                 feature_attributes[a+"_2"].append(to_str([f2.getAttribute(a)]))
     return map(str, feature_ids), feature_geoms, feature_evolution_types, feature_attributes, link_geoms, link_source_ids, link_target_ids, link_evaluation
 
-
-
 def export_links(layer1, layer2, links, path, params, arguments):
     output_dir = '/'.join(path)
     if not os.path.exists(output_dir): os.makedirs(output_dir)
@@ -367,66 +364,6 @@ def export_links(layer1, layer2, links, path, params, arguments):
     layer2.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.gpkg', layer='layer2', driver="GPKG")
     with open('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS_metadata.json', 'w', encoding='utf-8') as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
-
-def export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params):
-    # export
-
-    evol_layer = features_appeared+features_disappeared+features_stable+features_split+features_merged+features_aggregated
-    evol_attrs = list(numpy.repeat('appeared',len(features_appeared)))+list(numpy.repeat('disappeared',len(features_disappeared)))+list(numpy.repeat('stable',len(features_stable)))+list(numpy.repeat('split',len(features_split)))+list(numpy.repeat('merged',len(features_merged)))+list(numpy.repeat('aggregated',len(features_aggregated)))
-
-    attributes = dict()
-    if "attributes" in params:
-        for a in params["attributes"]:
-            attributes[a+"_1"] = []
-            attributes[a+"_2"] = []
-    # print("exporting attributes " + str(attributes.keys()))
-    #TODO clean than up
-    if "attributes" in params:
-        for x in features_appeared:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([]))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_disappeared:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([x.getAttribute(a)]))
-                attributes[a+"_2"].append(to_str([]))
-        for x in features_stable:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_split:
-            for a in params["attributes"]:
-                attributes[a+"_1"].append(to_str([x.getCorrespondant(0).getAttribute(a)]))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        for x in features_merged:
-            for a in params["attributes"]:
-                attribute_values = []
-                for c in range(0,x.getCorrespondants().size()):
-                    attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-                attributes[a+"_1"].append(to_str(attribute_values))
-                attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-        #for x in features_aggregated:
-        #    for a in params["attributes"]:
-        #        attribute_values = []
-        #        for c in range(0,x.getCorrespondants().size()):
-        #            attribute_values.append(x.getCorrespondant(c).getAttribute(a))
-        #        attributes[a+"_1"].append(to_str(attribute_values))
-        #        attributes[a+"_2"].append(to_str([x.getAttribute(a)]))
-
-    evol_polys = []
-    for x in tqdm(evol_layer,desc=f"{str(datetime.now())} - Exporting features",position=0):
-        evol_polys.append(make_polygon(x.getGeom()))
-
-    evol_ids = [str(x.getAttribute(0)) for x in evol_layer]
-
-    evol = geopandas.GeoDataFrame({'id':evol_ids, 'type':evol_attrs, 'geometry':evol_polys}, crs = crs)
-    for a, v in attributes.items():
-        evol[a] = v
-
-    prefix = params["output_prefix"]
-    # evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.shp')
-    evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.gpkg', layer='evolution', driver="GPKG")
-
 
 def geojson_export(links, path, params):
     links.to_file('/'.join(path)+f'/{params["output_prefix"]}_MATCHING-LINKS.geojson', driver='GeoJSON')

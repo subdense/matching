@@ -42,7 +42,7 @@ from java.lang import Runtime, Long
 
 import matching
 
-params = matching.get_params(parameter_file=args.parameters.name if args.parameters else None, 
+params = matching.get_params(parameter_file=args.parameters.name if args.parameters else None,
                              layer1=args.layer1.name,
                              layer2=args.layer2.name,
                              crs=args.crs if args.crs else None,
@@ -58,12 +58,9 @@ crs = CRS.from_user_input(params["crs"])
 
 evol, links = matching.match(idb1,idb2,attributes,params)
 
-# links, features_stable, features_split, features_merged, features_aggregated, features_disappeared, features_appeared = matching.post_process_links(liensPoly, db1, db2, crs, params['id_index'])
-
 import sys
 matching.export_links(idb1, idb2, links, path, params, sys.argv)
 
-# matching.export(features_appeared, features_disappeared, features_stable, features_split, features_merged, features_aggregated, crs, path, params)
 prefix = params["output_prefix"]
 evol.to_file('/'.join(path)+f'/{prefix}_EVOLUTION.gpkg', layer='evolution', driver="GPKG")
 print(str(datetime.datetime.now())+" - all done")
