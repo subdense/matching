@@ -1,7 +1,7 @@
 import jpype.imports
 from jpype.types import *
 import os
-import datetime
+import datetime, time
 import argparse
 from tqdm import tqdm
 
@@ -42,6 +42,8 @@ from java.lang import Runtime, Long
 
 import matching
 
+start_time = round(time.time() * 1000)
+
 params = matching.get_params(parameter_file=args.parameters.name if args.parameters else None,
                              layer1=args.layer1.name,
                              layer2=args.layer2.name,
@@ -57,6 +59,8 @@ path = [".","output_data"]
 crs = CRS.from_user_input(params["crs"])
 
 evol, links = matching.match(idb1,idb2,attributes,params)
+
+params['run_time'] = round(time.time() * 1000) - start_time
 
 import sys
 matching.export_links(idb1, idb2, links, path, params, sys.argv)
