@@ -228,7 +228,7 @@ def process_links(input_links, db1, db2, attributes):
     feature_ids = list()
     feature_geoms = list()
     feature_evolution_types = list()
-    feature_link_ids = list()
+    feature_link_ids = list() # id of the matching link to which this feature corresponds
     feature_attributes = dict()
     for a in attributes:
         feature_attributes[a+"_1"] = []
@@ -240,7 +240,7 @@ def process_links(input_links, db1, db2, attributes):
     link_source_ids = list()
     link_target_ids = list()
     link_evaluation = list()
-    link_ids = list()
+    link_ids = list() # id of the matching link to which this link corresponds
     for f in input_links:
         link_id = ""
         # 1--1 : stability
