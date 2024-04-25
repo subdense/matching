@@ -55,12 +55,7 @@ def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, 
 
     params['algo_params']=param
     params['id_index']=id_index
-    params['layer1']=layer1
-    params['layer2']=layer2
-    # if exists('./data/parameters.json'):
-    #     with open('./data/parameters.json') as parameter_file:
-    #         params_from_file = json.load(parameter_file)
-    #         params |= params_from_file
+
     if parameter_file:
         params_from_file = json.load(parameter_file)
         params |= params_from_file
@@ -74,12 +69,6 @@ def get_params(parameter_file = None, layer1 = None, layer2 = None, crs = None, 
         params['attributes'] = json.loads(attributes)
     if output_prefix:
         params['output_prefix'] = output_prefix
-
-        # test data by default: committed in data/bati
-    if not layer1:
-        layer1 = "./data/bati/neudorf_2012.shp"
-    if not layer2:
-        layer2 = "./data/bati/neudorf_2022.shp"
 
     return(params)
 
