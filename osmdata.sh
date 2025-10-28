@@ -23,5 +23,6 @@ echo "" >> tmp.overpassql
 rm "tmp/buildings_"$name".*"
 
 wget -O "tmp/buildings_"$name".osm" --post-file=tmp.overpassql "https://overpass-api.de/api/interpreter"
-#ogr2ogr -skipFailures "tmp/buildings_"$name".shp" "tmp/buildings_"$name".osm" multipolygons -oo USE_CUSTOM_INDEXING=NO
-ogr2ogr -skipFailures "tmp/buildings_"$name".shp" "tmp/buildings_"$name".osm" multipolygons -oo USE_CUSTOM_INDEXING=NO
+
+ogr2ogr -skipFailures "tmp/buildings_OSM_"$name".gpkg" "tmp/buildings_"$name".osm" multipolygons -oo USE_CUSTOM_INDEXING=NO
+

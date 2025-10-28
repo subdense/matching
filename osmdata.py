@@ -16,4 +16,5 @@ features_reproj = features.to_crs(crs="EPSG:2154")
 #print(features_reproj.crs())
 #features_reproj.set_crs("EPSG:2154", inplace=True, allow_override=True)
 
-features_reproj[features_reproj.geometry.geom_type=='POLYGON'].to_file('tmp/buildings_'+name+'.shp', engine='pyogrio')
+features_reproj[features_reproj.geometry.geom_type=='POLYGON'].to_file('tmp/buildings_OSM_'+name+'.gpkg', engine='pyogrio')
+
