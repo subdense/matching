@@ -135,8 +135,7 @@ for index, sample in tqdm(select.iterrows(), desc=f"{str(datetime.now())} - Proc
             }
             with open('/'.join(path)+f'/{directory}/{select_layer}/{index}/data_{comp_index}.geojson', 'w', encoding='utf-8') as f:
                 json.dump(geojson, f, ensure_ascii=False, indent=2)
-            fileList.append(
-                f'{select_layer}/{index}/data_{comp_index}.geojson')
+            fileList.append({"task": f'{select_layer}/{index}/data_{comp_index}.geojson',"annotations": []})
         jsonList = {
             # "dates":[date1,date2],
             # "wmts":[wmts1,wmts2],
