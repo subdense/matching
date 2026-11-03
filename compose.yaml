@@ -14,6 +14,8 @@ services:
       args:
         HTTP_PROXY: ${HTTP_PROXY}
         HTTPS_PROXY: ${HTTPS_PROXY}
+        UID: ${UID:-1000} # to give permission to write outside the container for output_data dir
+
     volumes:
       - type: bind
         source: ./data
@@ -24,7 +26,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '10'
+          cpus: "10"
           memory: 20G
 
 # The commented out section below is an example of how to define a PostgreSQL

@@ -1,6 +1,9 @@
-jpype1
-shapely
-geopandas
-tqdm
-networkx
-pyogrio
+jpype1==1.5.0
+shapely==2.0.4
+geopandas==0.14.3
+tqdm==4.66.4
+networkx==3.2.1
+pyogrio==0.7.2
+pandas==2.0.3
+numpy==1.25.2
+fiona==1.9.4
